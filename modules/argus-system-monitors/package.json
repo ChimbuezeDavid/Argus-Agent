@@ -1,0 +1,10 @@
+{
+  "name": "argus-system-monitors",
+  "version": "1.0.0",
+  "description": "Native observers for Argus Agent",
+  "main": "index.ts",
+  "types": "index.ts",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

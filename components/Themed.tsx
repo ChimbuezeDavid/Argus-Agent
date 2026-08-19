@@ -5,8 +5,8 @@
 import { Text as DefaultText, View as DefaultView } from 'react-native';
 
 import { useColorScheme } from './useColorScheme';
-
-import Colors from '@/constants/Colors';
+import Colors, { ColorPalette } from '@/constants/Colors';
+import { useSettingsStore } from '@/store/settingsStore';
 
 type ThemeProps = {
   lightColor?: string;
@@ -18,14 +18,18 @@ export type ViewProps = ThemeProps & DefaultView['props'];
 
 export function useThemeColor(
   props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+  colorName: keyof ColorPalette
 ) {
-  const theme = useColorScheme();
+  const theme = useColorScheme() ?? 'dark';
+  const highContrast = useSettingsStore((s) => s.highContrast);
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
     return colorFromProps;
   } else {
+    if (highContrast) {
+      return theme === 'dark' ? Colors.highContrastDark[colorName] : Colors.highContrastLight[colorName];
+    }
     return Colors[theme][colorName];
   }
 }

@@ -11,13 +11,24 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.argus.agent",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "CALL_PHONE",
+        "PACKAGE_USAGE_STATS",
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -32,6 +43,15 @@
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-sqlite",
+      "expo-secure-store",
+      "./plugins/withNotificationService",
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Allow Argus Agent to monitor geofences in the background."
         }
       ]
     ],

@@ -1,66 +1,75 @@
-import { SymbolView } from 'expo-symbols';
 import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+import { useHCITheme } from '@/hooks/useHCITheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  const { colors, scaleFont } = useHCITheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarHideOnKeyboard: true,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 56 + Math.max(insets.bottom, 12),
+          paddingBottom: Math.max(insets.bottom, 10),
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: scaleFont(11),
+          fontWeight: '700',
+        },
       }}>
+      {/* 1. Argus AI Tab */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
+          title: 'Argus',
+          tabBarIcon: ({ focused }) => (
+            <Ionicons
+              name="sparkles"
+              size={scaleFont(21)}
+              color={focused ? '#f59e0b' : '#64748b'}
             />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
           ),
         }}
       />
+
+      {/* 2. Finances & Budget Tab */}
       <Tabs.Screen
-        name="two"
+        name="expenses"
         options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
+          title: 'Finances',
+          tabBarIcon: ({ focused }) => (
+            <MaterialCommunityIcons
+              name="credit-card"
+              size={scaleFont(21)}
+              color={focused ? '#38bdf8' : '#64748b'}
+            />
+          ),
+        }}
+      />
+
+      {/* 3. Life Hub Tab */}
+      <Tabs.Screen
+        name="vault"
+        options={{
+          title: 'Hub',
+          tabBarIcon: ({ focused }) => (
+            <Ionicons
+              name="folder"
+              size={scaleFont(21)}
+              color={focused ? '#f59e0b' : '#64748b'}
             />
           ),
         }}
@@ -68,3 +77,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
