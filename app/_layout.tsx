@@ -155,12 +155,21 @@ export default function RootLayout() {
 
   return (
     <>
-      {showSplash ? (
+      <RootLayoutNav />
+
+      {/* 1. Welcome Splash Screen (renders over navigation until finished) */}
+      {showSplash && (
         <WelcomeSplashScreen onFinish={handleSplashFinish} />
-      ) : showOnboarding ? (
+      )}
+
+      {/* 2. Onboarding Access Modal */}
+      {showOnboarding && (
         <OnboardingAccessModal visible={showOnboarding} onComplete={handleOnboardingComplete} />
-      ) : isLocked ? (
-        <View style={[styles.lockContainer, { backgroundColor: colors.background }]}>
+      )}
+
+      {/* 3. Biometric App Lock Shield (renders over navigation when locked) */}
+      {!showSplash && !showOnboarding && isLocked && (
+        <View style={[StyleSheet.absoluteFill, styles.lockContainer, { backgroundColor: colors.background, zIndex: 9999 }]}>
           <View
             style={[
               styles.lockShieldCircle,
@@ -187,11 +196,9 @@ export default function RootLayout() {
             <Text style={[styles.unlockBtnText, { fontSize: scaleFont(14) }]}>Unlock with Biometrics</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <RootLayoutNav />
       )}
 
-      {/* Full-Screen Habit Stacking Takeover Overlay */}
+      {/* 4. Full-Screen Habit Stacking Takeover Overlay */}
       <HabitStackTakeoverModal
         visible={!!habitTakeoverData}
         data={habitTakeoverData}
