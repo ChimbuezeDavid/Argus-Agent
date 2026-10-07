@@ -376,32 +376,72 @@ export default function ArgusHomeScreen() {
     }
   };
 
-  const handleManualSync = async () => {
-    triggerHaptic('medium');
+  // Live GPS & Geofence location resolution
+  const updateCurrentLocation = useCallback(async () => {
     try {
-      const db = await getDatabase();
-      const [notifEvents, unconfirmed, geofences, notesCount] = await Promise.all([
-        db.getAllAsync<any>('SELECT COUNT(*) as count FROM notification_events').catch(() => [{ count: 0 }]),
-        db.getAllAsync<any>('SELECT COUNT(*) as count FROM expenses WHERE status = "unconfirmed"').catch(() => [{ count: 0 }]),
-        db.getAllAsync<any>('SELECT COUNT(*) as count FROM geofences WHERE is_active = 1').catch(() => [{ count: 0 }]),
-        db.getAllAsync<any>('SELECT COUNT(*) as count FROM notes').catch(() => [{ count: 0 }]),
+      const coords = await geofenceService.getCurrentGPSLocation();
+      if (coords) {
+        const geofences = await geofenceService.listGeofences();
+        let insideFenceName: string | null = null;
+        for (const fence of geofences) {
+          const latDiff = Math.abs(coords.latitude - fence.latitude);
+          const lonDiff = Math.abs(coords.longitude - fence.longitude);
+          const approxRadiusDeg = Math.max(fence.radius / 111000, 0.001);
+          if (latDiff <= approxRadiusDeg && lonDiff <= approxRadiusDeg) {
+            insideFenceName = fence.identifier;
+            break;
+          }
+        }
+
+        if (insideFenceName) {
+          setActiveLocationName(insideFenceName);
+        } else if (coords.city || coords.region) {
+          const locStr = [coords.city, coords.region].filter(Boolean).join(', ');
+          setActiveLocationName(locStr);
+        } else if (coords.address) {
+          setActiveLocationName(coords.address);
+        }
+      }
+    } catch (e) {
+      // Background location fallback
+    }
+  }, []);
+
+  // Periodic location updater every 45 seconds
+  useEffect(() => {
+    updateCurrentLocation();
+    const interval = setInterval(updateCurrentLocation, 45000);
+    return () => clearInterval(interval);
+  }, [updateCurrentLocation]);
+
+  // Sync Toast State (3-second popup feedback without icons)
+  const [syncToastVisible, setSyncToastVisible] = useState(false);
+  const [syncToastMessage, setSyncToastMessage] = useState('Argus synced on-device');
+  const toastTimeoutRef = useRef<any>(null);
+
+  const handleManualSync = async () => {
+    triggerHaptic('selection');
+    try {
+      await Promise.all([
+        geofenceService.syncGeofencesWithOS().catch(() => {}),
+        useSettingsStore.getState().syncSystemPermissions().catch(() => {}),
+        refreshHomeScreenData().catch(() => {}),
+        updateCurrentLocation().catch(() => {}),
       ]);
-
-      await geofenceService.syncGeofencesWithOS().catch(() => {});
-      await useSettingsStore.getState().syncSystemPermissions().catch(() => {});
-
       triggerHaptic('success');
-      Alert.alert(
-        '⚡ Argus Diagnostic Sync',
-        `All on-device services are synchronized:\n\n` +
-        `• 🔔 Bank Interceptor: ${notifEvents[0]?.count || 0} events captured\n` +
-        `• 💳 Unconfirmed Alerts: ${unconfirmed[0]?.count || 0} pending\n` +
-        `• 📍 Active Geofences: ${geofences[0]?.count || 0} boundaries active\n` +
-        `• 📝 Vault Knowledge: ${notesCount[0]?.count || 0} notes indexed\n` +
-        `• 🔒 Permissions & OS State: 100% in sync`
-      );
+      setSyncToastMessage('Argus synced on-device');
+      setSyncToastVisible(true);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => {
+        setSyncToastVisible(false);
+      }, 3000);
     } catch (e: any) {
-      Alert.alert('Diagnostic Sync', 'Sync completed on-device.');
+      setSyncToastMessage('Argus synced on-device');
+      setSyncToastVisible(true);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => {
+        setSyncToastVisible(false);
+      }, 3000);
     }
   };
 
@@ -526,6 +566,24 @@ export default function ArgusHomeScreen() {
         onClose={() => setDrawerVisible(false)}
         activeScreen="argus"
       />
+
+      {/* 7. Non-intrusive 3-second Sync Toast Feedback (Pure Text) */}
+      {syncToastVisible && (
+        <View
+          style={[
+            styles.floatingToast,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              top: Math.max(insets.top, 16) + 48,
+            },
+          ]}
+        >
+          <Text style={[styles.floatingToastText, { color: colors.text, fontSize: scaleFont(12) }]}>
+            {syncToastMessage}
+          </Text>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -581,6 +639,24 @@ const styles = StyleSheet.create({
   messageListContent: {
     padding: 16,
     paddingBottom: 110,
+  },
+  floatingToast: {
+    position: 'absolute',
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    zIndex: 999,
+  },
+  floatingToastText: {
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });
 

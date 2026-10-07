@@ -136,6 +136,20 @@ CREATE TABLE IF NOT EXISTS habit_completions (
   completed_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 13. Executive Plans & Agenda Table
+CREATE TABLE IF NOT EXISTS plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  due_date TEXT,
+  due_time TEXT,
+  priority TEXT NOT NULL DEFAULT 'normal', -- 'urgent', 'high', 'normal', 'low'
+  status TEXT NOT NULL DEFAULT 'pending',   -- 'pending', 'completed'
+  category TEXT DEFAULT 'task',             -- 'task', 'meeting', 'reminder'
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Default Settings Insertions
 INSERT OR IGNORE INTO settings (key, value) VALUES ('gemini_model', 'gemini-3.7-flash');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('primary_currency', 'NGN');

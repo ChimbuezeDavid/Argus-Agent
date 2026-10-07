@@ -7,15 +7,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useHCITheme } from '@/hooks/useHCITheme';
 
-import NotesTab from '@/components/vault/NotesTab';
+import PlanTab from '@/components/vault/PlanTab';
 import TelemetryTab from '@/components/vault/TelemetryTab';
 import GeofencesTab from '@/components/vault/GeofencesTab';
 import { MaterialTopBar, NavigationDrawer, ContextualTabBar, TabItem } from '@/components/navigation';
 
-type VaultLens = 'notes' | 'telemetry' | 'geofences';
+type VaultLens = 'plan' | 'telemetry' | 'geofences';
 
 const VAULT_TABS: TabItem[] = [
-  { key: 'notes', label: 'Notes', icon: 'document-text-outline' },
+  { key: 'plan', label: 'Plan', icon: 'checkbox-outline' },
   { key: 'geofences', label: 'Geofences', icon: 'location-outline' },
   { key: 'telemetry', label: 'Screen Time', icon: 'hardware-chip-outline' },
 ];
@@ -23,7 +23,7 @@ const VAULT_TABS: TabItem[] = [
 export default function VaultScreen() {
   const insets = useSafeAreaInsets();
   const { colors, triggerHaptic } = useHCITheme();
-  const [activeLens, setActiveLens] = useState<VaultLens>('notes');
+  const [activeLens, setActiveLens] = useState<VaultLens>('plan');
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
@@ -44,13 +44,13 @@ export default function VaultScreen() {
       {/* 1. Material Top Bar with Hamburger Menu */}
       <MaterialTopBar
         title="Vault"
-        subtitle={activeLens === 'notes' ? 'Executive Notes & Drafts' : activeLens === 'geofences' ? 'Active Geofence Boundaries' : 'App Usage & Screen Time'}
+        subtitle={activeLens === 'plan' ? 'Executive Schedule & Tasks' : activeLens === 'geofences' ? 'Active Geofence Boundaries' : 'App Usage & Screen Time'}
         onOpenDrawer={() => setDrawerVisible(true)}
       />
 
       {/* 2. Active Tab Content Surface */}
       <View style={styles.contentBox}>
-        {activeLens === 'notes' && <NotesTab refreshSignal={refreshSignal} />}
+        {activeLens === 'plan' && <PlanTab refreshSignal={refreshSignal} />}
         {activeLens === 'telemetry' && <TelemetryTab refreshSignal={refreshSignal} />}
         {activeLens === 'geofences' && <GeofencesTab refreshSignal={refreshSignal} />}
       </View>

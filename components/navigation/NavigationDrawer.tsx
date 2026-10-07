@@ -233,7 +233,7 @@ export function NavigationDrawer({ visible, onClose, activeScreen = 'argus' }: N
                   Vault
                 </Text>
                 <Text style={[styles.navItemDesc, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
-                  Notes, geofences & telemetry
+                  Plans, geofences & telemetry
                 </Text>
               </View>
             </TouchableOpacity>

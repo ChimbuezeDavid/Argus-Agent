@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Text } from '@/components/Themed';
 import { Ionicons } from '@expo/vector-icons';
 import { useHCITheme } from '@/hooks/useHCITheme';
@@ -7,8 +7,8 @@ import { useHCITheme } from '@/hooks/useHCITheme';
 export interface ActionShortcut {
   id: string;
   label: string;
-  icon: string;
-  iconType: 'ionicons' | 'material' | 'feather';
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
   prompt: string;
 }
 
@@ -25,39 +25,33 @@ export function SuggestedActions({ shortcuts, onSelectAction }: SuggestedActions
       id: 'act_1',
       label: 'System Status',
       icon: 'shield-checkmark',
-      iconType: 'ionicons',
+      iconColor: '#38bdf8',
       prompt: 'Argus, check device readiness and telemetry status',
     },
     {
       id: 'act_2',
       label: 'Navigate',
-      icon: 'map',
-      iconType: 'ionicons',
-      prompt: 'Navigate to Eko Hotel Lagos on maps',
+      icon: 'navigate',
+      iconColor: '#f472b6',
+      prompt: 'Argus, open maps navigation to current destination',
     },
     {
       id: 'act_3',
       label: 'Budget Pulse',
-      icon: 'wallet-outline',
-      iconType: 'ionicons',
-      prompt: 'What is my budget status?',
+      icon: 'pie-chart',
+      iconColor: '#34d399',
+      prompt: 'Argus, give me a quick summary of my monthly budget and spending',
+    },
+    {
+      id: 'act_4',
+      label: 'Today Plan',
+      icon: 'calendar',
+      iconColor: '#f59e0b',
+      prompt: 'Argus, what plans and tasks do I have scheduled for today?',
     },
   ];
 
   const actionItems = shortcuts && shortcuts.length > 0 ? shortcuts : defaultShortcuts;
-
-  const renderIcon = (action: ActionShortcut) => {
-    switch (action.id) {
-      case 'act_1':
-        return <Ionicons name="shield-checkmark" size={14} color="#38bdf8" style={{ marginRight: 6 }} />;
-      case 'act_2':
-        return <Ionicons name="map" size={14} color="#f472b6" style={{ marginRight: 6 }} />;
-      case 'act_3':
-        return <Ionicons name="stats-chart" size={14} color="#34d399" style={{ marginRight: 6 }} />;
-      default:
-        return <Ionicons name="flash" size={14} color="#38bdf8" style={{ marginRight: 6 }} />;
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -65,53 +59,80 @@ export function SuggestedActions({ shortcuts, onSelectAction }: SuggestedActions
         SUGGESTED ACTIONS
       </Text>
 
-      <View style={styles.chipsRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        style={styles.scrollView}
+      >
         {actionItems.map((action) => (
           <TouchableOpacity
             key={action.id}
-            style={[styles.actionChip, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={[
+              styles.actionChip,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
             onPress={() => {
               triggerHaptic('selection');
               onSelectAction(action.prompt);
             }}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
           >
-            {renderIcon(action)}
-            <Text style={[styles.chipText, { color: colors.text, fontSize: scaleFont(12) }]} numberOfLines={1}>
+            <View style={[styles.iconCircle, { backgroundColor: `${action.iconColor}18` }]}>
+              <Ionicons name={action.icon} size={15} color={action.iconColor} />
+            </View>
+            <Text style={[styles.chipText, { color: colors.text, fontSize: scaleFont(12) }]}>
               {action.label}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
     marginBottom: 20,
   },
   sectionHeader: {
     fontWeight: '800',
     letterSpacing: 1,
     marginBottom: 10,
-    paddingHorizontal: 2,
+    paddingHorizontal: 16,
   },
-  chipsRow: {
+  scrollView: {
+    flexGrow: 0,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    gap: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   actionChip: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  iconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   chipText: {
     fontWeight: '700',

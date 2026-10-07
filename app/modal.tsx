@@ -18,6 +18,7 @@ import {
   Platform,
   PermissionsAndroid,
   AppState,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,6 +79,21 @@ export default function SettingsModal() {
     return () => sub.remove();
   }, []);
 
+  // Handle native Android hardware back button
+  useEffect(() => {
+    const onBackPress = () => {
+      if (activeCategory !== null) {
+        triggerHaptic('light');
+        setActiveCategory(null);
+        return true; // Prevent default action (stay in settings)
+      }
+      return false; // Allow default action (exit settings)
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [activeCategory, triggerHaptic]);
+
   const CATEGORIES: CategoryItem[] = [
     {
       id: 'security',
@@ -117,7 +133,7 @@ export default function SettingsModal() {
     },
     {
       id: 'currency',
-      title: 'Preferences & Currency',
+      title: 'Currency',
       subtitle: `Primary currency: ${settings.currency || 'NGN'}`,
       icon: 'cash',
       iconColor: '#14b8a6',
