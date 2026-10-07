@@ -1,4 +1,4 @@
-// Service to sync and parse Nigerian bank SMS messages directly from on-device SMS inbox
+// Service to sync and parse Nigerian bank and telecom SMS messages directly from on-device SMS inbox
 import { Platform, PermissionsAndroid } from 'react-native';
 import ArgusSystemMonitors, { SmsMessage } from '@/modules/argus-system-monitors';
 import { getDatabase } from '@/services/database/db';
@@ -20,20 +20,66 @@ const BANK_SENDERS = [
   'alat', 'fidelity', 'ecobank', 'fcmb', 'polaris', 'keystone', 'jaiz', 'taj'
 ];
 
+// Known Nigerian telecom operators
+const TELCO_SENDERS = [
+  'mtn', 'airtel', 'glo', '9mobile', 'etisalat'
+];
+
 const FINANCIAL_KEYWORDS = [
   'debited', 'credited', 'acct:', 'acc:', 'amt:', 'bal:', 'dr:', 'cr:',
   'naira', 'ngn', 'transfer', 'pos purchase', 'web purchase', 'atm wdl', 'debit alert', 'credit alert'
 ];
 
+// Explicit telecom purchase confirmation receipts (to distinguish actual spend from promo spam)
+const TELCO_RECEIPT_PATTERNS = [
+  'recharge of',
+  'recharged successfully',
+  'recharge successful',
+  'account has been credited with',
+  'your payment of',
+  'data plan was successful',
+  'subscription was successful',
+  'has been charged',
+  'cost: n',
+  'cost: ngn',
+  'price: n',
+  'price: ngn',
+  'successful recharge',
+  'data bundle purchase',
+];
+
+// Promotional spam triggers to discard
+const TELCO_PROMO_TRIGGERS = [
+  'dial *',
+  'win a',
+  'get 100% bonus',
+  'enjoy 200% bonus',
+  'hurry now',
+  'special offer',
+  'borrow airtime',
+  'opt out',
+  'text stop',
+];
+
 /**
- * Checks if sender or SMS content matches financial institution or bank alert patterns.
+ * Checks if sender or SMS content matches financial institution or real telecom recharge receipts.
  */
 export function isLikelyBankMessage(address: string, body: string): boolean {
   const cleanAddr = (address || '').toLowerCase();
   const cleanBody = (body || '').toLowerCase();
 
   const isBankSender = BANK_SENDERS.some((bank) => cleanAddr.includes(bank));
+  const isTelcoSender = TELCO_SENDERS.some((telco) => cleanAddr.includes(telco));
+
   const hasFinancialKeyword = FINANCIAL_KEYWORDS.some((kw) => cleanBody.includes(kw));
+
+  // If telecom sender, strictly verify it's a real recharge receipt and NOT promotional marketing
+  if (isTelcoSender) {
+    const isPromo = TELCO_PROMO_TRIGGERS.some((promo) => cleanBody.includes(promo));
+    const isRealReceipt = TELCO_RECEIPT_PATTERNS.some((rcpt) => cleanBody.includes(rcpt));
+    if (isPromo && !isRealReceipt) return false;
+    return isRealReceipt && /\d/.test(cleanBody);
+  }
 
   // Must have numbers (amount/account info)
   const hasDigit = /\d/.test(cleanBody);
@@ -42,32 +88,45 @@ export function isLikelyBankMessage(address: string, body: string): boolean {
 }
 
 /**
- * Parses raw SMS text from Nigerian banks into structured financial transaction details.
+ * Parses raw SMS text from Nigerian banks or telcos into structured financial transaction details.
  */
 export function parseNigerianBankSms(body: string, sender: string): ParsedBankAlert {
   const cleanBody = (body || '').trim();
   const lowerBody = cleanBody.toLowerCase();
+  const cleanSender = (sender || '').toLowerCase();
 
-  // 1. Determine alert type
+  const isTelcoSender = TELCO_SENDERS.some((telco) => cleanSender.includes(telco));
+
+  // 1. Determine alert type: Debit vs Credit
   let type: 'debit' | 'credit' | 'other' = 'other';
-  if (
+
+  if (isTelcoSender) {
+    // Airtime or Data purchases are always Money Out (Debit)
+    type = 'debit';
+  } else if (
     lowerBody.includes('debit') ||
     lowerBody.includes('dr:') ||
     lowerBody.includes('debited') ||
-    lowerBody.includes('dr alert')
+    lowerBody.includes('dr alert') ||
+    lowerBody.includes('pos purchase') ||
+    lowerBody.includes('web purchase') ||
+    lowerBody.includes('atm wdl') ||
+    lowerBody.includes('transferred to')
   ) {
     type = 'debit';
   } else if (
     lowerBody.includes('credit') ||
     lowerBody.includes('cr:') ||
     lowerBody.includes('credited') ||
-    lowerBody.includes('cr alert')
+    lowerBody.includes('cr alert') ||
+    lowerBody.includes('deposit') ||
+    lowerBody.includes('received from')
   ) {
     type = 'credit';
   }
 
-  // 2. Extract numeric amount with Naira or NGN
-  const amountRegex = /(?:₦|NGN|Naira|amt:?\s*(?:ngn|₦)?)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/i;
+  // 2. Extract numeric amount
+  const amountRegex = /(?:₦|NGN|Naira|amt:?\s*(?:ngn|₦)?|cost:?\s*(?:ngn|₦)?|price:?\s*(?:ngn|₦)?|recharge of\s*(?:ngn|₦)?)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/i;
   const match = cleanBody.match(amountRegex);
 
   let amount: number | null = null;
@@ -91,24 +150,44 @@ export function parseNigerianBankSms(body: string, sender: string): ParsedBankAl
     }
   }
 
+  // Fallback regex for "N1,000" or "N500" shorthand common in telco SMS
+  if (!amount) {
+    const nRegex = /\bN([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+(?:\.[0-9]{1,2})?)\b/;
+    const nMatch = cleanBody.match(nRegex);
+    if (nMatch && nMatch[1]) {
+      const parsed = parseFloat(nMatch[1].replace(/,/g, ''));
+      if (!isNaN(parsed) && parsed > 0) {
+        amount = parsed;
+      }
+    }
+  }
+
   // 3. Extract Merchant / Description
   let merchant = sender || 'Bank Alert';
-  // Check for common POS / WEB / Transfer indicators
-  const descMatch = cleanBody.match(/(?:desc:|narration:|remarks:|to:|at:)\s*([^.;\n\r]+)/i);
-  if (descMatch && descMatch[1]) {
-    merchant = descMatch[1].trim();
+
+  if (isTelcoSender) {
+    const foundTelco = TELCO_SENDERS.find((t) => cleanSender.includes(t));
+    merchant = foundTelco ? `${foundTelco.toUpperCase()} Airtime / Data` : 'Telecom Recharge';
   } else {
-    // If sender has bank name, extract clean title
-    const foundBank = BANK_SENDERS.find((b) => sender.toLowerCase().includes(b));
-    if (foundBank) {
-      merchant = foundBank.toUpperCase();
+    // Check for common POS / WEB / Transfer indicators
+    const descMatch = cleanBody.match(/(?:desc:|narration:|remarks:|to:|at:)\s*([^.;\n\r]+)/i);
+    if (descMatch && descMatch[1]) {
+      merchant = descMatch[1].trim();
+    } else {
+      const foundBank = BANK_SENDERS.find((b) => cleanSender.includes(b));
+      if (foundBank) {
+        merchant = foundBank.toUpperCase();
+      }
     }
   }
 
   // 4. Infer category
   let category = 'Other';
   const lowerMerchant = (merchant + ' ' + cleanBody).toLowerCase();
-  if (
+
+  if (isTelcoSender || lowerMerchant.includes('airtime') || lowerMerchant.includes('data bundle') || lowerMerchant.includes('recharge')) {
+    category = 'Airtime & Data';
+  } else if (
     lowerMerchant.includes('eat') ||
     lowerMerchant.includes('food') ||
     lowerMerchant.includes('restaurant') ||
@@ -128,15 +207,6 @@ export function parseNigerianBankSms(body: string, sender: string): ParsedBankAl
     lowerMerchant.includes('conoil')
   ) {
     category = 'Transport / Fuel';
-  } else if (
-    lowerMerchant.includes('airtime') ||
-    lowerMerchant.includes('data') ||
-    lowerMerchant.includes('mtn') ||
-    lowerMerchant.includes('airtel') ||
-    lowerMerchant.includes('glo') ||
-    lowerMerchant.includes('9mobile')
-  ) {
-    category = 'Airtime & Data';
   } else if (
     lowerMerchant.includes('nepa') ||
     lowerMerchant.includes('ikedc') ||
@@ -167,7 +237,6 @@ export function parseNigerianBankSms(body: string, sender: string): ParsedBankAl
 
 /**
  * Requests Android READ_SMS runtime permission.
- * Native standard permission dialog appears on Tecno / Android 13/14 without "Restricted settings" block.
  */
 export async function requestSmsPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
@@ -177,7 +246,7 @@ export async function requestSmsPermission(): Promise<boolean> {
       PermissionsAndroid.PERMISSIONS.READ_SMS,
       {
         title: 'SMS Bank Alert Access',
-        message: 'Argus needs permission to read your incoming bank SMS alerts to automatically track and verify your financial budget 100% on-device.',
+        message: 'Argus needs permission to read incoming bank SMS alerts to automatically track and verify your financial budget 100% on-device.',
         buttonNeutral: 'Ask Later',
         buttonNegative: 'Cancel',
         buttonPositive: 'Allow',
@@ -231,7 +300,7 @@ export async function syncBankSmsInbox(limit: number = 60): Promise<SyncSmsResul
       continue;
     }
 
-    // Check if this notification/SMS was already imported (deduplicate by exact text and timestamp)
+    // Deduplicate by exact text and timestamp
     const existing = await db.getFirstAsync<any>(
       `SELECT id FROM notification_events WHERE text = ? LIMIT 1`,
       [msg.body]
@@ -254,16 +323,17 @@ export async function syncBankSmsInbox(limit: number = 60): Promise<SyncSmsResul
       [msg.address || 'SMS_INBOX', `Bank Alert (${msg.address})`, msg.body, msgDate, parsed.amount, parsed.category]
     );
 
-    // 2. Insert into expenses as unconfirmed bank alert
+    // 2. Insert into expenses as unconfirmed bank alert with type (debit vs credit)
     await db.runAsync(
       `INSERT INTO expenses (
-        amount, currency, category, description, date, source, status, raw_merchant, related_notification_id, created_at
-      ) VALUES (?, 'NGN', ?, ?, ?, 'notification_extracted', 'unconfirmed', ?, ?, CURRENT_TIMESTAMP)`,
+        amount, currency, category, description, date, source, status, type, raw_merchant, related_notification_id, created_at
+      ) VALUES (?, 'NGN', ?, ?, ?, 'notification_extracted', 'unconfirmed', ?, ?, ?, CURRENT_TIMESTAMP)`,
       [
         parsed.amount,
         parsed.category,
-        parsed.merchant ? `Bank Alert: ${parsed.merchant}` : `Bank Alert (${msg.address})`,
+        parsed.merchant ? `${parsed.type === 'credit' ? '[CREDIT] ' : ''}Alert: ${parsed.merchant}` : `Bank Alert (${msg.address})`,
         msgDate,
+        parsed.type,
         parsed.merchant,
         notifRes.lastInsertRowId,
       ]

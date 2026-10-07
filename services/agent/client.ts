@@ -195,13 +195,29 @@ export async function runAgentConversation(
   const rawTarget = modelName.replace(/^models\//, '');
   const available = await getAvailableModels(apiKey);
 
+  // Map requested model identifiers to known live Google Generative AI endpoints
+  const resolveModelAlias = (name: string): string[] => {
+    switch (name) {
+      case 'gemini-3.8-flash':
+      case 'gemini-3.7-flash':
+        return [name, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+      case 'gemini-3.8-pro':
+      case 'gemini-3.7-pro':
+        return [name, 'gemini-2.5-pro', 'gemini-pro-latest', 'gemini-2.5-flash'];
+      default:
+        return [name];
+    }
+  };
+
   const candidateModels = Array.from(new Set([
-    rawTarget,
+    ...resolveModelAlias(rawTarget),
     ...available,
-    'gemini-3.7-flash',
-    'gemini-3.7-pro',
     'gemini-3.8-flash',
-    'gemini-3.8-pro',
+    'gemini-3.7-flash',
+    'gemini-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-pro-latest',
+    'gemini-3.5-flash-lite',
   ])).filter(Boolean);
 
   console.log('[Agent Client] Candidate Gemini model priority list:', candidateModels);
@@ -259,6 +275,7 @@ export async function runAgentConversation(
     let sendSuccess = false;
 
     // Send message with automatic model fallback
+    let lastErrorEncountered = '';
     if (iteration === 0) {
       for (const candidate of candidateModels) {
         try {
@@ -280,12 +297,15 @@ export async function runAgentConversation(
           break;
         } catch (err: any) {
           const errMsg = String(err?.message || '');
+          lastErrorEncountered = errMsg;
           if (
             errMsg.includes('404') ||
             errMsg.includes('400') ||
+            errMsg.includes('402') ||
             errMsg.includes('403') ||
             errMsg.includes('not found') ||
             errMsg.includes('no longer available') ||
+            errMsg.includes('credits are depleted') ||
             errMsg.includes('models/') ||
             errMsg.includes('fetch') ||
             errMsg.includes('Error fetching') ||
@@ -315,7 +335,10 @@ export async function runAgentConversation(
     }
 
     if (!sendSuccess || !result) {
-      throw new Error('All candidate models failed. Please verify your Gemini API key in Settings.');
+      if (lastErrorEncountered.includes('402') || lastErrorEncountered.includes('prepayment credits')) {
+        throw new Error('Gemini API quota depleted (402 Prepayment Credits Depleted). Please top up credits or switch API keys in Google AI Studio.');
+      }
+      throw new Error(`All candidate models failed (${lastErrorEncountered.substring(0, 80) || 'Unknown error'}). Please verify your Gemini API key in Settings.`);
     }
 
     const response = await result.response;

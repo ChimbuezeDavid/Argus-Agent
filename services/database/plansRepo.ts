@@ -1,5 +1,16 @@
 import { getDatabase } from './db';
 
+export interface ScheduleTimeBlock {
+  id: string;
+  time: string; // e.g. "08:00 AM"
+  activity: string; // e.g. "Standup & Daily Planning"
+}
+
+export interface DaySchedule {
+  dayName: string; // "Monday", "Tuesday", etc.
+  blocks: ScheduleTimeBlock[];
+}
+
 export interface PlanItem {
   id: number;
   title: string;
@@ -9,6 +20,10 @@ export interface PlanItem {
   priority: 'urgent' | 'high' | 'normal' | 'low';
   status: 'pending' | 'completed';
   category: string;
+  plan_type?: 'task' | 'schedule';
+  days_duration?: number;
+  repeat_weekly?: number;
+  schedule_data?: string | null; // JSON string of DaySchedule[]
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +35,10 @@ export interface CreatePlanInput {
   due_time?: string;
   priority?: 'urgent' | 'high' | 'normal' | 'low';
   category?: string;
+  plan_type?: 'task' | 'schedule';
+  days_duration?: number;
+  repeat_weekly?: number;
+  schedule_data?: string;
 }
 
 /**
@@ -33,11 +52,15 @@ export async function createPlan(input: CreatePlanInput): Promise<PlanItem> {
   const dueTime = input.due_time || null;
   const priority = input.priority || 'normal';
   const category = input.category || 'task';
+  const planType = input.plan_type || 'task';
+  const daysDuration = Math.min(Math.max(input.days_duration || 1, 1), 7);
+  const repeatWeekly = input.repeat_weekly ? 1 : 0;
+  const scheduleData = input.schedule_data || null;
 
   const result = await db.runAsync(
-    `INSERT INTO plans (title, description, due_date, due_time, priority, status, category)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
-    [title, description, dueDate, dueTime, priority, category]
+    `INSERT INTO plans (title, description, due_date, due_time, priority, status, category, plan_type, days_duration, repeat_weekly, schedule_data)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+    [title, description, dueDate, dueTime, priority, category, planType, daysDuration, repeatWeekly, scheduleData]
   );
 
   const row = await db.getFirstAsync<PlanItem>(
@@ -119,6 +142,22 @@ export async function updatePlan(
   if (updates.category !== undefined) {
     sets.push('category = ?');
     params.push(updates.category);
+  }
+  if (updates.plan_type !== undefined) {
+    sets.push('plan_type = ?');
+    params.push(updates.plan_type);
+  }
+  if (updates.days_duration !== undefined) {
+    sets.push('days_duration = ?');
+    params.push(Math.min(Math.max(updates.days_duration, 1), 7));
+  }
+  if (updates.repeat_weekly !== undefined) {
+    sets.push('repeat_weekly = ?');
+    params.push(updates.repeat_weekly ? 1 : 0);
+  }
+  if (updates.schedule_data !== undefined) {
+    sets.push('schedule_data = ?');
+    params.push(updates.schedule_data);
   }
 
   if (sets.length === 0) return;

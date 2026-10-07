@@ -117,14 +117,31 @@ export function BankAlertsView({
               >
                 {/* Header: Bank & Amount */}
                 <View style={styles.alertTopRow}>
-                  <View style={styles.bankBadge}>
-                    <Ionicons name="notifications" size={13} color="#f59e0b" style={{ marginRight: 4 }} />
-                    <Text style={[styles.bankBadgeText, { fontSize: scaleFont(11) }]}>
-                      Detected Alert
-                    </Text>
-                  </View>
-                  <Text style={[styles.alertAmount, { color: colors.text, fontSize: scaleFont(17) }]}>
-                    -{formatNaira(item.amount)}
+                  {item.type === 'credit' ? (
+                    <View style={[styles.bankBadge, { backgroundColor: '#10b98120' }]}>
+                      <Ionicons name="arrow-down-circle" size={13} color="#10b981" style={{ marginRight: 4 }} />
+                      <Text style={[styles.bankBadgeText, { color: '#10b981', fontSize: scaleFont(11) }]}>
+                        CREDIT (Money In)
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.bankBadge}>
+                      <Ionicons name="arrow-up-circle" size={13} color="#f59e0b" style={{ marginRight: 4 }} />
+                      <Text style={[styles.bankBadgeText, { fontSize: scaleFont(11) }]}>
+                        DEBIT (Money Out)
+                      </Text>
+                    </View>
+                  )}
+                  <Text
+                    style={[
+                      styles.alertAmount,
+                      {
+                        color: item.type === 'credit' ? '#10b981' : colors.text,
+                        fontSize: scaleFont(17),
+                      },
+                    ]}
+                  >
+                    {item.type === 'credit' ? '+' : '-'}{formatNaira(item.amount)}
                   </Text>
                 </View>
 

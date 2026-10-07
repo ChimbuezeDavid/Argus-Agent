@@ -30,6 +30,9 @@ async function runAutoMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       if (!existingCols.has('currency')) {
         await db.execAsync("ALTER TABLE expenses ADD COLUMN currency TEXT NOT NULL DEFAULT 'NGN';");
       }
+      if (!existingCols.has('type')) {
+        await db.execAsync("ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'debit';");
+      }
 
       const gfInfo = (await db.getAllAsync('PRAGMA table_info(geofences);')) as any[];
       const gfCols = new Set(gfInfo.map((c) => c.name));
@@ -38,6 +41,21 @@ async function runAutoMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       }
       if (!gfCols.has('exit_habit')) {
         await db.execAsync("ALTER TABLE geofences ADD COLUMN exit_habit TEXT;");
+      }
+
+      const plansInfo = (await db.getAllAsync('PRAGMA table_info(plans);')) as any[];
+      const plansCols = new Set(plansInfo.map((c) => c.name));
+      if (!plansCols.has('plan_type')) {
+        await db.execAsync("ALTER TABLE plans ADD COLUMN plan_type TEXT NOT NULL DEFAULT 'task';");
+      }
+      if (!plansCols.has('days_duration')) {
+        await db.execAsync("ALTER TABLE plans ADD COLUMN days_duration INTEGER DEFAULT 1;");
+      }
+      if (!plansCols.has('repeat_weekly')) {
+        await db.execAsync("ALTER TABLE plans ADD COLUMN repeat_weekly INTEGER DEFAULT 0;");
+      }
+      if (!plansCols.has('schedule_data')) {
+        await db.execAsync("ALTER TABLE plans ADD COLUMN schedule_data TEXT;");
       }
     } catch (colErr) {
       console.warn('[SQLite AutoMigration] Column check error:', colErr);

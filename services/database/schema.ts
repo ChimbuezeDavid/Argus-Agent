@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   source TEXT NOT NULL, -- 'manual', 'notification_extracted'
   status TEXT NOT NULL DEFAULT 'confirmed', -- 'confirmed', 'unconfirmed'
+  type TEXT NOT NULL DEFAULT 'debit', -- 'debit', 'credit'
   raw_merchant TEXT,
   related_notification_id INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -146,6 +147,10 @@ CREATE TABLE IF NOT EXISTS plans (
   priority TEXT NOT NULL DEFAULT 'normal', -- 'urgent', 'high', 'normal', 'low'
   status TEXT NOT NULL DEFAULT 'pending',   -- 'pending', 'completed'
   category TEXT DEFAULT 'task',             -- 'task', 'meeting', 'reminder'
+  plan_type TEXT NOT NULL DEFAULT 'task',   -- 'task', 'schedule'
+  days_duration INTEGER DEFAULT 1,          -- 1 to 7 days
+  repeat_weekly INTEGER DEFAULT 0,          -- 0 or 1
+  schedule_data TEXT,                       -- JSON string of day-by-day time blocks
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

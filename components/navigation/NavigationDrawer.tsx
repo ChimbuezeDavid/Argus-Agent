@@ -271,7 +271,7 @@ export function NavigationDrawer({ visible, onClose, activeScreen = 'argus' }: N
             <View style={[styles.footerBadge, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <View style={[styles.statusDot, { backgroundColor: '#10b981' }]} />
               <Text style={[styles.footerText, { color: colors.textSecondary, fontSize: scaleFont(10) }]}>
-                Argus v1.2.0 • On-Device Runtime
+                Argus v1.5.0 • On-Device Runtime
               </Text>
             </View>
           </View>

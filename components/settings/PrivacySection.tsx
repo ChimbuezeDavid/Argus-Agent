@@ -76,11 +76,11 @@ export function PrivacySection({ settings }: PrivacySectionProps) {
       <SectionCard
         icon={<Ionicons name="shield-outline" size={scaleFont(20)} color="#f59e0b" style={{ marginRight: 8 }} />}
         title="Privacy & Diagnostic Controls"
-        subtitle="Argus runs 100% on-device. Your financial transactions and conversations remain strictly local."
+        subtitle="Your data and conversations remain strictly local."
       >
         <ToggleRow
-          label="Anonymous Usage Analytics"
-          description="Disabled by default. Helps diagnose system bottlenecks anonymously"
+          label="Anonymous Analytics"
+          description="Helps diagnose performance bottlenecks"
           value={settings.analyticsEnabled}
           onValueChange={(val) => {
             triggerHaptic('selection');
@@ -89,8 +89,8 @@ export function PrivacySection({ settings }: PrivacySectionProps) {
         />
 
         <ToggleRow
-          label="Ad Tracking & Profiling Rejection"
-          description="Argus rejects all advertising SDKs and never shares telemetry"
+          label="Reject Ad Tracking"
+          description="Blocks third-party advertising SDKs"
           value={settings.adTrackingEnabled}
           onValueChange={(val) => {
             triggerHaptic('selection');
@@ -100,8 +100,8 @@ export function PrivacySection({ settings }: PrivacySectionProps) {
         />
 
         <ToggleRow
-          label="Crash & Exception Diagnostics"
-          description="Record local crash logs to prevent app freezes"
+          label="Crash Diagnostics"
+          description="Saves local exception logs"
           value={settings.crashReportingEnabled}
           onValueChange={(val) => {
             triggerHaptic('selection');
@@ -115,7 +115,7 @@ export function PrivacySection({ settings }: PrivacySectionProps) {
       <SectionCard
         icon={<Ionicons name="server-outline" size={scaleFont(20)} color="#6366f1" style={{ marginRight: 8 }} />}
         title="Storage & Data Actions"
-        subtitle="Perform database maintenance, export offline spreadsheets, or clear history."
+        subtitle="Manage database maintenance and data exports."
       >
         <View style={styles.verticalActionsList}>
           {/* Action 1: Export CSV Statement */}

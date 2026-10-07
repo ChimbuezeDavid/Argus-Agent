@@ -395,11 +395,19 @@ export default function ArgusHomeScreen() {
 
         if (insideFenceName) {
           setActiveLocationName(insideFenceName);
-        } else if (coords.city || coords.region) {
-          const locStr = [coords.city, coords.region].filter(Boolean).join(', ');
-          setActiveLocationName(locStr);
+        } else if (coords.city && coords.region) {
+          setActiveLocationName(`${coords.city}, ${coords.region}`);
+        } else if (coords.city) {
+          setActiveLocationName(coords.city);
+        } else if (coords.region) {
+          setActiveLocationName(coords.region);
         } else if (coords.address) {
-          setActiveLocationName(coords.address);
+          // Shorten long street addresses to first 2 segments (e.g. "Adetokunbo Ademola St • Victoria Island")
+          const parts = coords.address.split(',').map((p) => p.trim()).filter(Boolean);
+          const shortAddress = parts.slice(0, 2).join(' • ');
+          setActiveLocationName(shortAddress || coords.address);
+        } else {
+          setActiveLocationName(`GPS (${coords.latitude.toFixed(2)}, ${coords.longitude.toFixed(2)})`);
         }
       }
     } catch (e) {

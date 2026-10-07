@@ -100,7 +100,7 @@ export function SecuritySection({ settings }: SecuritySectionProps) {
       <SectionCard
         icon={<Ionicons name="shield-checkmark" size={scaleFont(20)} color="#38bdf8" style={{ marginRight: 8 }} />}
         title="Observer & RPA Permissions"
-        subtitle="Argus runs strictly on-device. Accessibility RPA enables autonomous UI navigation, button tapping, and screen reading."
+        subtitle="On-device permissions for automated UI actions and screen awareness."
       >
         <View style={styles.permRow}>
           <View style={{ flex: 1 }}>

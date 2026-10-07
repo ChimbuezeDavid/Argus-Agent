@@ -275,85 +275,40 @@ export default function GeofencesTab({ refreshSignal }: GeofencesTabProps) {
       contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60a5fa" />}
     >
-      <SectionCard
-        title="Background Geofence Monitoring"
-        icon="navigate-circle"
-        style={{ marginBottom: 14 }}
-      >
-        <Text style={styles.telemetrySubtitle}>
-          Android OS location boundaries trigger automatic logging when you arrive or leave home, office, or client sites.
-        </Text>
-
-        <View style={styles.permRow}>
-          <Text style={styles.permLabel}>Background Location</Text>
-          <View style={[styles.permBadge, locationPerms.canMonitor ? styles.permBadgeOn : styles.permBadgeOff]}>
-            <Text style={[styles.permBadgeText, locationPerms.canMonitor ? styles.permBadgeTextOn : styles.permBadgeTextOff]}>
-              {locationPerms.canMonitor ? 'Active & Ready' : locationPerms.foregroundGranted ? 'Foreground Only' : 'Disabled'}
+      {/* Compact Live Location GPS Bar */}
+      <View style={[styles.compactGpsStrip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.compactGpsInfo}>
+          <Ionicons name="location" size={16} color="#10b981" style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.compactGpsTitle, { color: colors.text, fontSize: scaleFont(12) }]} numberOfLines={1}>
+              {currentLocation ? (currentLocation.city || currentLocation.region || currentLocation.address || 'GPS Fix Acquired') : 'Live Location Idle'}
+            </Text>
+            <Text style={[styles.compactGpsSub, { color: colors.textMuted, fontSize: scaleFont(10) }]} numberOfLines={1}>
+              {currentLocation
+                ? `Lat: ${currentLocation.latitude.toFixed(4)}, Lon: ${currentLocation.longitude.toFixed(4)}`
+                : 'Tap Get GPS Fix to detect coordinates'}
             </Text>
           </View>
         </View>
 
-        {!locationPerms.canMonitor && (
-          <TouchableOpacity
-            style={[styles.openSettingsBtn, { marginTop: 12, borderColor: '#38bdf8' }]}
-            onPress={handleRequestLocationPerms}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="location" size={15} color="#38bdf8" style={{ marginRight: 6 }} />
-            <Text style={[styles.openSettingsBtnText, { color: '#38bdf8' }]}>
-              Authorize Location Tracking
-            </Text>
-          </TouchableOpacity>
-        )}
-      </SectionCard>
-
-      <View style={[styles.currentLocCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent' }}>
-            <Ionicons name="pin" size={18} color="#34d399" style={{ marginRight: 6 }} />
-            <Text style={[styles.currentLocTitle, { color: colors.text, fontSize: scaleFont(13) }]}>Current GPS Location</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.refreshLocBtn, { backgroundColor: colors.surface }]}
-            onPress={handleFetchCurrentLocation}
-            disabled={isFetchingLocation}
-            activeOpacity={0.8}
-          >
-            {isFetchingLocation ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <>
-                <Ionicons name="locate" size={13} color={colors.primary} style={{ marginRight: 4 }} />
-                <Text style={[styles.refreshLocBtnText, { color: colors.primary, fontSize: scaleFont(11) }]}>Get GPS Fix</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {currentLocation ? (
-          <View style={{ marginTop: 10, backgroundColor: 'transparent' }}>
-            <Text style={[styles.currentAddressText, { color: colors.text, fontSize: scaleFont(13) }]}>{currentLocation.address}</Text>
-            <Text style={[styles.currentCoordsText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-              Lat: {currentLocation.latitude.toFixed(6)} • Lon: {currentLocation.longitude.toFixed(6)} (±{currentLocation.accuracy ? Math.round(currentLocation.accuracy) : 10}m)
-            </Text>
-
-            <TouchableOpacity
-              style={styles.quickFenceBtn}
-              onPress={() => handleQuickGeofenceAtCurrentLocation('My Current Spot')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add-circle-outline" size={15} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={[styles.quickFenceBtnText, { fontSize: scaleFont(12) }]}>Set 200m Geofence Here</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <Text style={[styles.currentLocPlaceholder, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-            Tap "Get GPS Fix" to detect your live location coordinates and resolve your street address.
-          </Text>
-        )}
+        <TouchableOpacity
+          style={[styles.compactFixBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={handleFetchCurrentLocation}
+          disabled={isFetchingLocation}
+          activeOpacity={0.8}
+        >
+          {isFetchingLocation ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <>
+              <Ionicons name="locate" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+              <Text style={[styles.compactFixText, { color: colors.primary, fontSize: scaleFont(11) }]}>Get GPS Fix</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
 
-      <View style={[styles.actionHeader, { marginTop: 18, marginBottom: 14 }]}>
+      <View style={[styles.actionHeader, { marginTop: 12, marginBottom: 12 }]}>
         <Text style={[styles.sectionHeaderTitle, { color: colors.textMuted, fontSize: scaleFont(11), marginBottom: 0 }]}>
           CONFIGURED GEOFENCES ({geofences.length})
         </Text>
@@ -676,6 +631,38 @@ export default function GeofencesTab({ refreshSignal }: GeofencesTabProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  compactGpsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  compactGpsInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  compactGpsTitle: {
+    fontWeight: '700',
+  },
+  compactGpsSub: {
+    marginTop: 2,
+  },
+  compactFixBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  compactFixText: {
+    fontWeight: '700',
   },
   modalContextSubtitle: {
     lineHeight: 18,
