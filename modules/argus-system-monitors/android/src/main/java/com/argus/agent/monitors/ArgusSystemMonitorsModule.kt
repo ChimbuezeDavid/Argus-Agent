@@ -20,6 +20,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.media.MediaRecorder
 import android.util.Base64
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationManagerCompat
 import expo.modules.kotlin.Promise
@@ -839,6 +841,66 @@ class ArgusSystemMonitorsModule : Module() {
       } catch (e: Exception) {
         0
       }
+    }
+
+    // =========================================================================
+    // 5. DIRECT SMS INBOX ACCESS & BANK TRANSACTION EXTRACTION
+    // =========================================================================
+
+    AsyncFunction("hasSmsPermission") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_SMS
+      ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    AsyncFunction("readBankSmsMessages") { limit: Int ->
+      val context = appContext.reactContext ?: return@AsyncFunction emptyList<Bundle>()
+      val resultList = mutableListOf<Bundle>()
+
+      val hasPerm = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_SMS
+      ) == PackageManager.PERMISSION_GRANTED
+
+      if (!hasPerm) {
+        return@AsyncFunction resultList
+      }
+
+      val maxRows = if (limit in 1..200) limit else 50
+      val uri = Uri.parse("content://sms/inbox")
+      val projection = arrayOf("_id", "address", "body", "date")
+      val sortOrder = "date DESC LIMIT $maxRows"
+
+      try {
+        val cursor = context.contentResolver.query(uri, projection, null, null, sortOrder)
+        cursor?.use { c ->
+          val idIdx = c.getColumnIndex("_id")
+          val addressIdx = c.getColumnIndex("address")
+          val bodyIdx = c.getColumnIndex("body")
+          val dateIdx = c.getColumnIndex("date")
+
+          while (c.moveToNext()) {
+            val id = if (idIdx >= 0) c.getString(idIdx) ?: "" else ""
+            val address = if (addressIdx >= 0) c.getString(addressIdx) ?: "" else ""
+            val body = if (bodyIdx >= 0) c.getString(bodyIdx) ?: "" else ""
+            val dateLong = if (dateIdx >= 0) c.getLong(dateIdx) else 0L
+
+            val bundle = Bundle().apply {
+              putString("id", id)
+              putString("address", address)
+              putString("body", body)
+              putDouble("timestamp", dateLong.toDouble())
+            }
+            resultList.add(bundle)
+          }
+        }
+      } catch (e: Exception) {
+        android.util.Log.e("ArgusSystemMonitors", "Error reading SMS inbox: ${e.message}")
+      }
+
+      resultList
     }
   }
 }

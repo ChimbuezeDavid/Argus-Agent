@@ -14,6 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as expensesRepo from '@/services/database/expensesRepo';
 import * as budgetRepo from '@/services/database/budgetRepo';
+import { syncBankSmsInbox } from '@/services/observation/smsSyncService';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { authenticateUser } from '@/services/security/securityService';
@@ -26,7 +27,9 @@ import {
   HeroBudgetCard,
   MonthNavHeader,
   UnconfirmedAlertsBanner,
+  BankAlertsView,
 } from '@/components/expenses';
+import { MaterialTopBar, NavigationDrawer, ContextualTabBar, TabItem } from '@/components/navigation';
 
 const CATEGORIES = [
   'Food & Dining',
@@ -40,7 +43,7 @@ const CATEGORIES = [
   'Other',
 ];
 
-type ViewMode = 'budget' | 'ledger';
+type ViewMode = 'ledger' | 'budget' | 'alerts';
 
 export default function ExpensesScreen() {
   const settings = useSettingsStore();
@@ -53,7 +56,8 @@ export default function ExpensesScreen() {
   const [unconfirmedList, setUnconfirmedList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('budget');
+  const [viewMode, setViewMode] = useState<ViewMode>('ledger');
+  const [drawerVisible, setDrawerVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -68,6 +72,32 @@ export default function ExpensesScreen() {
   const [totalBudgetInput, setTotalBudgetInput] = useState('');
   const [selectedBudgetCat, setSelectedBudgetCat] = useState('Food & Dining');
   const [catBudgetInput, setCatBudgetInput] = useState('');
+
+  // SMS Sync state
+  const [isSyncingSms, setIsSyncingSms] = useState(false);
+
+  const handleSyncSms = async () => {
+    setIsSyncingSms(true);
+    try {
+      const res = await syncBankSmsInbox(60);
+      if (res.importedCount > 0) {
+        Alert.alert(
+          'Bank SMS Synced',
+          `Captured ${res.importedCount} new bank transactions from ${res.scannedCount} scanned SMS messages.`
+        );
+      } else if (res.scannedCount > 0) {
+        Alert.alert(
+          'SMS Scan Complete',
+          `Scanned ${res.scannedCount} SMS messages. No new bank debit/credit alerts found.`
+        );
+      }
+      fetchExpensesData();
+    } catch (e: any) {
+      Alert.alert('SMS Scan Failed', e?.message || 'Could not read SMS inbox.');
+    } finally {
+      setIsSyncingSms(false);
+    }
+  };
 
   const fetchExpensesData = useCallback(async () => {
     setIsLoading(true);
@@ -262,131 +292,91 @@ export default function ExpensesScreen() {
     });
   }, [expenses, currentMonthKey, searchQuery, selectedCategory]);
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, 12) }]}>
-      {/* Top Header Row (Finances + Settings Gear) */}
-      <View style={styles.topHeaderRow}>
-        <Text style={[styles.topHeaderTitle, { color: colors.text, fontSize: scaleFont(22) }]}>Finances</Text>
-        <TouchableOpacity
-          style={[styles.settingsCircleBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => {
-            triggerHaptic('selection');
-            router.push('/modal');
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="settings-sharp" size={17} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
+  const FINANCE_TABS: TabItem[] = useMemo(() => [
+    { key: 'ledger', label: 'Ledger', icon: 'receipt-outline' },
+    { key: 'budget', label: 'Budget Limits', icon: 'pie-chart-outline' },
+    { key: 'alerts', label: 'Bank Alerts', icon: 'notifications-outline', badge: unconfirmedList.length },
+  ], [unconfirmedList.length]);
 
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* 1. Material Top Bar */}
+      <MaterialTopBar
+        title="Finance"
+        subtitle={`${budgetSummary?.monthLabel || 'Current Month'} • Ledger`}
+        onOpenDrawer={() => setDrawerVisible(true)}
+      />
+
+      {/* 2. Month Selector */}
       <MonthNavHeader
         monthLabel={budgetSummary?.monthLabel || 'Current Month'}
         onPrevMonth={handlePrevMonth}
         onNextMonth={handleNextMonth}
       />
 
-      <UnconfirmedAlertsBanner
-        unconfirmedList={unconfirmedList}
-        formatNaira={formatNaira}
-        onConfirmCategory={handleConfirmCategory}
-      />
-
-      {/* Segmented View Switcher */}
-      <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.segmentButton,
-            viewMode === 'budget' && [styles.segmentActive, { backgroundColor: colors.primaryBg, borderColor: colors.primary }],
-          ]}
-          onPress={() => {
-            triggerHaptic('selection');
-            setViewMode('budget');
-          }}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name="target"
-            size={16}
-            color={viewMode === 'budget' ? colors.primary : colors.textMuted}
-            style={{ marginRight: 6 }}
-          />
-          <Text
-            style={[
-              styles.segmentText,
-              { color: viewMode === 'budget' ? colors.primary : colors.textMuted, fontSize: scaleFont(12) },
-            ]}
-          >
-            Budget & Limits
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.segmentButton,
-            viewMode === 'ledger' && [styles.segmentActive, { backgroundColor: colors.primaryBg, borderColor: colors.primary }],
-          ]}
-          onPress={() => {
-            triggerHaptic('selection');
-            setViewMode('ledger');
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="document-text-outline"
-            size={15}
-            color={viewMode === 'ledger' ? colors.primary : colors.textMuted}
-            style={{ marginRight: 6 }}
-          />
-          <Text
-            style={[
-              styles.segmentText,
-              { color: viewMode === 'ledger' ? colors.primary : colors.textMuted, fontSize: scaleFont(12) },
-            ]}
-          >
-            Transactions ({expenses.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {viewMode === 'budget' ? (
-        <>
-          <HeroBudgetCard
-            budgetSummary={budgetSummary}
-            formatNaira={formatNaira}
-            onLogExpense={() => setModalVisible(true)}
-            onEditBudget={(currentTotal) => {
-              setTotalBudgetInput(currentTotal > 0 ? String(currentTotal) : '');
-              setBudgetModalVisible(true);
-            }}
-            onExport={handleExportCsv}
-          />
-          <BudgetView
-            budgetSummary={budgetSummary}
+      {/* 3. Sub-Tab Surface */}
+      <View style={{ flex: 1 }}>
+        {viewMode === 'ledger' && (
+          <LedgerView
+            expenses={filteredExpenses}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            categories={CATEGORIES}
             refreshing={refreshing}
             onRefresh={onRefresh}
             formatNaira={formatNaira}
-            onSelectCategory={(cat, budget) => {
-              setSelectedBudgetCat(cat);
-              setCatBudgetInput(budget > 0 ? String(budget) : '');
-              setBudgetModalVisible(true);
-            }}
+            onDeleteExpense={handleDeleteExpense}
+            monthLabel={budgetSummary?.monthLabel}
           />
-        </>
-      ) : (
-        <LedgerView
-          expenses={filteredExpenses}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          categories={CATEGORIES}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          formatNaira={formatNaira}
-          onDeleteExpense={handleDeleteExpense}
-          monthLabel={budgetSummary?.monthLabel}
-        />
-      )}
+        )}
+
+        {viewMode === 'budget' && (
+          <>
+            <HeroBudgetCard
+              budgetSummary={budgetSummary}
+              formatNaira={formatNaira}
+              onLogExpense={() => setModalVisible(true)}
+              onEditBudget={(currentTotal) => {
+                setTotalBudgetInput(currentTotal > 0 ? String(currentTotal) : '');
+                setBudgetModalVisible(true);
+              }}
+              onExport={handleExportCsv}
+            />
+            <BudgetView
+              budgetSummary={budgetSummary}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              formatNaira={formatNaira}
+              onSelectCategory={(cat, budget) => {
+                setSelectedBudgetCat(cat);
+                setCatBudgetInput(budget > 0 ? String(budget) : '');
+                setBudgetModalVisible(true);
+              }}
+            />
+          </>
+        )}
+
+        {viewMode === 'alerts' && (
+          <BankAlertsView
+            unconfirmedList={unconfirmedList}
+            formatNaira={formatNaira}
+            onConfirmCategory={handleConfirmCategory}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            onSyncSms={handleSyncSms}
+            isSyncingSms={isSyncingSms}
+          />
+        )}
+      </View>
+
+      {/* 4. Contextual Sub-Tabs */}
+      <ContextualTabBar
+        tabs={FINANCE_TABS}
+        activeKey={viewMode}
+        onTabChange={(k) => setViewMode(k as ViewMode)}
+      />
 
       <AddExpenseModal
         visible={modalVisible}
@@ -415,6 +405,13 @@ export default function ExpensesScreen() {
         catBudgetInput={catBudgetInput}
         setCatBudgetInput={setCatBudgetInput}
         monthLabel={budgetSummary?.monthLabel}
+      />
+
+      {/* Global Navigation Drawer */}
+      <NavigationDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        activeScreen="finance"
       />
     </View>
   );

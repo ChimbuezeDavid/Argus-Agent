@@ -41,6 +41,7 @@ import { ChatBubble } from '@/components/chat/ChatBubble';
 import { Omnibar } from '@/components/chat/Omnibar';
 import { VoiceAssistantModal } from '@/components/chat/VoiceAssistantModal';
 import { SessionHistoryModal } from '@/components/chat/SessionHistoryModal';
+import { NavigationDrawer } from '@/components/navigation';
 
 interface Message {
   id: string;
@@ -66,6 +67,7 @@ export default function ArgusHomeScreen() {
   const [conversationsList, setConversationsList] = useState<conversationRepo.Conversation[]>([]);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
   const [voicePromptInput, setVoicePromptInput] = useState('');
 
   // Messages & Input State
@@ -357,8 +359,8 @@ export default function ArgusHomeScreen() {
       console.error('Argus Command execution error:', e);
       const isMissingKey = e.message === 'API_KEY_MISSING' || !settings.apiKey;
       const errorText = isMissingKey
-        ? 'Please configure your Gemini API Key in Settings to enable Argus Agent intelligence.'
-        : `Argus Agent could not complete this command: ${e.message || 'Network / API error'}. Please verify your Gemini API Key in Settings.`;
+        ? 'Gemini intelligence engine is not configured in the application environment (.env).'
+        : `Argus Agent encountered an error: ${e.message || 'Network / API error'}.`;
 
       setMessages((prev) => [
         ...prev,
@@ -419,6 +421,7 @@ export default function ArgusHomeScreen() {
       <TelemetryHeader
         insetsTop={insets.top}
         locationName={activeLocationName}
+        onOpenDrawer={() => setDrawerVisible(true)}
         onOpenHistory={() => setHistoryModalVisible(true)}
         onSync={handleManualSync}
       />
@@ -515,6 +518,13 @@ export default function ArgusHomeScreen() {
         onSelectConversation={handleSelectConversation}
         onNewSession={handleNewSession}
         onDeleteConversation={handleDeleteConversation}
+      />
+
+      {/* 6. Navigation Drawer */}
+      <NavigationDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        activeScreen="argus"
       />
     </KeyboardAvoidingView>
   );

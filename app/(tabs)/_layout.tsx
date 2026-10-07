@@ -14,21 +14,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.tabIconDefault,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 56 + Math.max(insets.bottom, 12),
-          paddingBottom: Math.max(insets.bottom, 10),
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: {
-          fontSize: scaleFont(11),
-          fontWeight: '700',
-        },
+        tabBarStyle: { display: 'none' },
       }}>
       {/* 1. Argus AI Tab */}
       <Tabs.Screen

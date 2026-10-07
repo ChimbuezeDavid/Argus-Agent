@@ -18,32 +18,39 @@ export function SectionCard({ icon, title, subtitle, children, style }: SectionC
   const renderIcon = () => {
     if (!icon) return null;
     if (React.isValidElement(icon)) {
-      return icon;
+      return (
+        <View style={[styles.iconWrapper, { backgroundColor: `${colors.primary}18` }]}>
+          {icon}
+        </View>
+      );
     }
     if (typeof icon === 'string') {
       return (
-        <Ionicons
-          name={icon as any}
-          size={scaleFont(16)}
-          color="#38bdf8"
-          style={{ marginRight: 8 }}
-        />
+        <View style={[styles.iconWrapper, { backgroundColor: `${colors.primary}18` }]}>
+          <Ionicons
+            name={icon as any}
+            size={scaleFont(18)}
+            color={colors.primary}
+          />
+        </View>
       );
     }
     return null;
   };
 
   return (
-    <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }, style]}>
+    <View style={[styles.groupCard, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       <View style={styles.groupHeader}>
         {renderIcon()}
-        <Text style={[styles.groupTitle, { color: colors.text, fontSize: scaleFont(14) }]}>{title}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.groupTitle, { color: colors.text, fontSize: scaleFont(15) }]}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.groupSubtitle, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
       </View>
-      {subtitle ? (
-        <Text style={[styles.groupSubtitle, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-          {subtitle}
-        </Text>
-      ) : null}
       {children}
     </View>
   );
@@ -51,21 +58,35 @@ export function SectionCard({ icon, title, subtitle, children, style }: SectionC
 
 const styles = StyleSheet.create({
   groupCard: {
-    borderRadius: 16,
+    borderRadius: 22,
     borderWidth: 1,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    gap: 12,
+    marginBottom: 12,
+  },
+  iconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   groupTitle: {
     fontWeight: '800',
+    letterSpacing: 0.2,
   },
   groupSubtitle: {
-    marginBottom: 12,
+    marginTop: 2,
     lineHeight: 16,
   },
 });

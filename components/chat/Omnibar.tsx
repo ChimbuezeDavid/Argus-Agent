@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Animated, View } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Animated, View, Platform } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { Text } from '@/components/Themed';
 import { useHCITheme } from '@/hooks/useHCITheme';
@@ -38,8 +38,10 @@ export function Omnibar({
   const handleInputChange = onChangeText || onInputChange || (() => {});
   const handleVoicePress = onOpenVoiceModal || onOpenVoiceAssistant || (() => {});
 
+  const safeBottomPadding = Math.max(insetsBottom || 0, Platform.OS === 'android' ? 28 : 16) + 8;
+
   return (
-    <View style={[styles.wrapper, { backgroundColor: colors.background, paddingBottom: 6 }]}>
+    <View style={[styles.wrapper, { backgroundColor: colors.background, paddingBottom: safeBottomPadding }]}>
       {/* Processing Indicator */}
       {isProcessing && (
         <View style={[styles.processingPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>

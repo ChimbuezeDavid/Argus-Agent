@@ -2,7 +2,7 @@ const { withAndroidManifest } = require('@expo/config-plugins');
 
 /**
  * Expo Config Plugin to inject the Notification Listener Service
- * directly into the AndroidManifest.xml during the prebuild phase.
+ * and Accessibility RPA Service directly into AndroidManifest.xml.
  */
 function withNotificationService(config) {
   return withAndroidManifest(config, async (config) => {
@@ -41,6 +41,43 @@ function withNotificationService(config) {
         ],
       });
       console.log(`[Config Plugin] Injected ${notificationServiceClass} into AndroidManifest.xml`);
+    }
+
+    // 2. Accessibility RPA Autonomous Screen Service
+    const accessibilityServiceClass = 'com.argus.agent.monitors.ArgusAccessibilityService';
+    const accessServiceExists = mainApplication.service.some(
+      (service) => service.$['android:name'] === accessibilityServiceClass
+    );
+
+    if (!accessServiceExists) {
+      mainApplication.service.push({
+        $: {
+          'android:name': accessibilityServiceClass,
+          'android:label': 'Argus Autonomous RPA Controller',
+          'android:permission': 'android.permission.BIND_ACCESSIBILITY_SERVICE',
+          'android:exported': 'true',
+        },
+        'intent-filter': [
+          {
+            action: [
+              {
+                $: {
+                  'android:name': 'android.accessibilityservice.AccessibilityService',
+                },
+              },
+            ],
+          },
+        ],
+        'meta-data': [
+          {
+            $: {
+              'android:name': 'android.accessibilityservice',
+              'android:resource': '@xml/accessibility_service_config',
+            },
+          },
+        ],
+      });
+      console.log(`[Config Plugin] Injected ${accessibilityServiceClass} into AndroidManifest.xml`);
     }
 
     return config;

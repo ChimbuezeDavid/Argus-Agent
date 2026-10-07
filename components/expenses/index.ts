@@ -5,3 +5,4 @@ export * from './LedgerView';
 export * from './HeroBudgetCard';
 export * from './MonthNavHeader';
 export * from './UnconfirmedAlertsBanner';
+export * from './BankAlertsView';

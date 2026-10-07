@@ -33,9 +33,6 @@ export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync().catch(() => {});
-
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -136,22 +133,10 @@ export default function RootLayout() {
     }
   };
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+  // Immediately dismiss native Android splash screen on layout mount so WelcomeSplashScreen takes over
   useEffect(() => {
-    if (error) {
-      console.warn('Font loading error:', error);
-    }
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   return (
     <>

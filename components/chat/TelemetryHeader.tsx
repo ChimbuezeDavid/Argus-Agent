@@ -8,6 +8,7 @@ import { useHCITheme } from '@/hooks/useHCITheme';
 interface TelemetryHeaderProps {
   insetsTop: number;
   locationName?: string;
+  onOpenDrawer?: () => void;
   onOpenHistory?: () => void;
   onSync?: () => void;
 }
@@ -15,6 +16,7 @@ interface TelemetryHeaderProps {
 export function TelemetryHeader({
   insetsTop,
   locationName = 'Asubi • Home',
+  onOpenDrawer,
   onOpenHistory,
   onSync,
 }: TelemetryHeaderProps) {
@@ -23,18 +25,20 @@ export function TelemetryHeader({
 
   return (
     <View style={[styles.headerContainer, { backgroundColor: colors.background, paddingTop: Math.max(insetsTop, 12) }]}>
-      {/* 1. ON-DEVICE Engine Pill */}
-      <TouchableOpacity
-        style={[styles.onDevicePill, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        onPress={() => {
-          triggerHaptic('selection');
-          onSync?.();
-        }}
-        activeOpacity={0.8}
-      >
-        <View style={styles.greenDot} />
-        <Text style={[styles.onDeviceText, { color: colors.text, fontSize: scaleFont(11) }]}>ON-DEVICE</Text>
-      </TouchableOpacity>
+      {/* 0. Hamburger Navigation Button */}
+      {onOpenDrawer && (
+        <TouchableOpacity
+          style={[styles.actionCircleBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => {
+            triggerHaptic('selection');
+            onOpenDrawer();
+          }}
+          activeOpacity={0.8}
+          accessibilityLabel="Open navigation drawer"
+        >
+          <Ionicons name="menu" size={20} color={colors.text} />
+        </TouchableOpacity>
+      )}
 
       {/* 2. Active Geofence / Location Pill */}
       <TouchableOpacity
@@ -51,7 +55,7 @@ export function TelemetryHeader({
         </Text>
       </TouchableOpacity>
 
-      {/* 3. Actions: Sync, Command History & Settings */}
+      {/* 3. Actions: Sync & Command History */}
       <View style={styles.actionsRow}>
         {onSync && (
           <TouchableOpacity
@@ -61,6 +65,7 @@ export function TelemetryHeader({
               onSync();
             }}
             activeOpacity={0.8}
+            accessibilityLabel="Sync on-device services"
           >
             <Ionicons name="sync-outline" size={17} color={colors.primary} />
           </TouchableOpacity>
@@ -73,19 +78,9 @@ export function TelemetryHeader({
             onOpenHistory?.();
           }}
           activeOpacity={0.8}
+          accessibilityLabel="Open session history"
         >
           <Ionicons name="time-outline" size={17} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionCircleBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => {
-            triggerHaptic('selection');
-            router.push('/modal');
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="settings-sharp" size={17} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>

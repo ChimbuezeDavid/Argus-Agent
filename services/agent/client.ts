@@ -9,13 +9,15 @@ import { listActiveLearnedRules } from '../database/learnedRulesRepo';
  * Retrieves the Gemini API key from secure storage.
  */
 export async function getGeminiApiKey(): Promise<string | null> {
+  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+  if (envKey) return envKey;
   try {
     const key = await SecureStore.getItemAsync('GEMINI_API_KEY');
     if (key && key.trim()) return key.trim();
   } catch (error) {
     console.error('Failed to read Gemini API key from SecureStore:', error);
   }
-  return process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || null;
+  return null;
 }
 
 /**
@@ -196,14 +198,10 @@ export async function runAgentConversation(
   const candidateModels = Array.from(new Set([
     rawTarget,
     ...available,
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-pro-latest',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash-001',
-    'gemini-pro',
+    'gemini-3.7-flash',
+    'gemini-3.7-pro',
+    'gemini-3.8-flash',
+    'gemini-3.8-pro',
   ])).filter(Boolean);
 
   console.log('[Agent Client] Candidate Gemini model priority list:', candidateModels);

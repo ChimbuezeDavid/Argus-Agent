@@ -87,6 +87,17 @@ export interface ArgusSystemMonitorsType {
     event: 'onSpeechPartialResults' | 'onSpeechResults' | 'onSpeechError' | 'onSpeechEnd' | 'onSpeechRmsChanged',
     listener: (data: any) => void
   ): EventSubscription | null;
+
+  // Phase 5: Direct SMS Inbox Reading
+  hasSmsPermission(): Promise<boolean>;
+  readBankSmsMessages(limit?: number): Promise<SmsMessage[]>;
+}
+
+export interface SmsMessage {
+  id: string;
+  address: string;
+  body: string;
+  timestamp: number;
 }
 
 export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
@@ -575,6 +586,24 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
       }
     } catch (e) {}
     return null;
+  },
+
+  hasSmsPermission: async () => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.hasSmsPermission === 'function') {
+        return await rawNativeModule.hasSmsPermission();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  readBankSmsMessages: async (limit: number = 50) => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.readBankSmsMessages === 'function') {
+        return await rawNativeModule.readBankSmsMessages(limit);
+      }
+    } catch (e) {}
+    return [];
   },
 };
 

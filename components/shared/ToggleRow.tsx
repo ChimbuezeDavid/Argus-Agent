@@ -43,8 +43,8 @@ export function ToggleRow({
       <Switch
         value={value}
         onValueChange={handleChange}
-        trackColor={{ false: '#3f3f46', true: colors.primary }}
-        thumbColor={value ? '#ffffff' : '#a1a1aa'}
+        trackColor={{ false: '#33353d', true: colors.primary }}
+        thumbColor={value ? '#ffffff' : '#9ba0a6'}
       />
     </View>
   );
@@ -55,14 +55,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 10,
   },
   rowLabel: {
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 2,
+    letterSpacing: 0.1,
   },
   rowDesc: {
-    lineHeight: 15,
-    marginRight: 12,
+    lineHeight: 16,
+    marginRight: 14,
   },
 });

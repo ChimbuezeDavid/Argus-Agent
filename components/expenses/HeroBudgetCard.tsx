@@ -24,21 +24,31 @@ export function HeroBudgetCard({
   if (!budgetSummary) return null;
 
   const isConfigured = budgetSummary.isConfigured && budgetSummary.totalMonthlyBudget > 0;
+  const remainingRunway = Math.max(0, budgetSummary.totalMonthlyBudget - budgetSummary.totalSpentThisMonth);
+  const isHealthy = budgetSummary.status === 'healthy';
+  const isWarning = budgetSummary.status === 'warning';
+  const isExceeded = budgetSummary.status === 'exceeded';
 
   return (
     <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {/* Top Header Row */}
-      <View style={styles.heroTopRow}>
-        <Text style={[styles.heroTitle, { color: colors.textMuted, fontSize: scaleFont(11) }]}>MONTHLY OVERVIEW</Text>
+      {/* 1. Radical Trust Status & Security Beacon */}
+      <View style={styles.trustHeaderRow}>
+        <View style={[styles.trustBeacon, { backgroundColor: '#10b98115', borderColor: '#10b98140' }]}>
+          <Ionicons name="shield-checkmark" size={13} color="#10b981" />
+          <Text style={[styles.trustBeaconText, { fontSize: scaleFont(10) }]}>
+            VERIFIED ON-DEVICE LEDGER
+          </Text>
+        </View>
+
         <View
           style={[
             styles.statusBadge,
             isConfigured
-              ? budgetSummary.status === 'healthy'
-                ? { backgroundColor: colors.successBg, borderColor: colors.success }
-                : budgetSummary.status === 'warning'
-                ? { backgroundColor: colors.warningBg, borderColor: colors.warning }
-                : { backgroundColor: colors.dangerBg, borderColor: colors.danger }
+              ? isHealthy
+                ? { backgroundColor: '#10b98120', borderColor: '#10b981' }
+                : isWarning
+                ? { backgroundColor: '#f59e0b20', borderColor: '#f59e0b' }
+                : { backgroundColor: '#ef444420', borderColor: '#ef4444' }
               : { backgroundColor: colors.surface, borderColor: colors.border },
           ]}
         >
@@ -47,78 +57,113 @@ export function HeroBudgetCard({
               styles.statusBadgeText,
               {
                 color: isConfigured
-                  ? budgetSummary.status === 'healthy'
-                    ? colors.success
-                    : budgetSummary.status === 'warning'
-                    ? colors.warning
-                    : colors.danger
+                  ? isHealthy
+                    ? '#10b981'
+                    : isWarning
+                    ? '#f59e0b'
+                    : '#ef4444'
                   : colors.textMuted,
                 fontSize: scaleFont(10),
               },
             ]}
           >
             {isConfigured
-              ? budgetSummary.status === 'healthy'
-                ? 'On Track'
-                : budgetSummary.status === 'warning'
-                ? '80%+ Used'
-                : 'Exceeded'
-              : 'Unset'}
+              ? isHealthy
+                ? 'Solvent & On Track'
+                : isWarning
+                ? 'Approaching Cap'
+                : 'Cap Exceeded'
+              : 'Limit Unset'}
           </Text>
         </View>
       </View>
 
-      {/* Main Amount Line */}
-      <Text style={[styles.heroAmount, { color: colors.text, fontSize: scaleFont(22) }]}>
-        {isConfigured
-          ? `${formatNaira(budgetSummary.totalSpentThisMonth)} / ${formatNaira(budgetSummary.totalMonthlyBudget)}`
-          : `${formatNaira(budgetSummary.totalSpentThisMonth)} / No Limit`}
-      </Text>
+      {/* 2. Cognitive Simplification Headline: "What is my safe runway?" */}
+      <View style={styles.headlineContainer}>
+        <Text style={[styles.headlineSub, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
+          {isConfigured ? 'SAFE DISCRETIONARY RUNWAY' : 'TOTAL MONTHLY OUTFLOW'}
+        </Text>
+        <Text style={[styles.headlineMain, { color: colors.text, fontSize: scaleFont(26) }]}>
+          {isConfigured ? formatNaira(remainingRunway) : formatNaira(budgetSummary.totalSpentThisMonth)}
+        </Text>
+        <Text style={[styles.headlineCaption, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
+          {isConfigured
+            ? `${formatNaira(budgetSummary.totalSpentThisMonth)} spent of ${formatNaira(budgetSummary.totalMonthlyBudget)} cap`
+            : 'No overall monthly spending ceiling set'}
+        </Text>
+      </View>
 
-      {/* Subtitle Telemetry */}
-      <Text style={[styles.heroSubtitle, { color: colors.textSecondary, fontSize: scaleFont(12) }]}>
-        Argus auto-tracks SMS from GTBank, OPay & Kuda.
-      </Text>
-
-      {/* Progress Bar (if configured) */}
+      {/* 3. Smooth Visual Proportion Gauge */}
       {isConfigured && (
-        <View style={[styles.progressBarBackground, { backgroundColor: colors.border }]}>
-          <View
-            style={[
-              styles.progressBarFill,
-              {
-                backgroundColor: budgetSummary.status === 'warning' ? colors.warning : budgetSummary.status === 'exceeded' ? colors.danger : colors.primary,
-                width: `${Math.min(100, Math.max(4, budgetSummary.overallPercentage))}%`,
-              },
-            ]}
-          />
+        <View style={styles.gaugeContainer}>
+          <View style={[styles.gaugeTrack, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.gaugeFill,
+                {
+                  width: `${Math.min(100, Math.max(3, budgetSummary.overallPercentage))}%`,
+                  backgroundColor: isExceeded ? '#ef4444' : isWarning ? '#f59e0b' : colors.primary,
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.gaugeMetaRow}>
+            <Text style={[styles.gaugeMetaText, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
+              {budgetSummary.overallPercentage.toFixed(0)}% utilized
+            </Text>
+            <Text style={[styles.gaugeMetaText, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
+              {isExceeded ? 'Exceeded limit' : `${formatNaira(remainingRunway)} buffer remaining`}
+            </Text>
+          </View>
         </View>
       )}
 
-      {/* Action Buttons Row */}
-      <View style={styles.heroActionsRow}>
-        <TouchableOpacity
-          style={[styles.heroSetBudgetButton, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            triggerHaptic('selection');
-            onEditBudget(budgetSummary.totalMonthlyBudget || 0);
-          }}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons name="target" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-          <Text style={[styles.heroSetBudgetText, { fontSize: scaleFont(13) }]}>Set Budget</Text>
-        </TouchableOpacity>
+      {/* 4. Radical Trust Privacy Micro-Badge */}
+      <View style={[styles.privacyBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Ionicons name="lock-closed" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
+        <Text style={[styles.privacyText, { color: colors.textSecondary, fontSize: scaleFont(10) }]}>
+          Zero bank credentials stored. Monitored strictly via local Android SMS alerts.
+        </Text>
+      </View>
 
+      {/* 5. Executive Action Buttons */}
+      <View style={styles.actionsRow}>
         <TouchableOpacity
-          style={[styles.heroLogSpendButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
           onPress={() => {
             triggerHaptic('selection');
             onLogExpense();
           }}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={16} color={colors.text} style={{ marginRight: 6 }} />
-          <Text style={[styles.heroLogSpendText, { color: colors.text, fontSize: scaleFont(13) }]}>Log Spend</Text>
+          <Ionicons name="add-circle" size={17} color="#ffffff" style={{ marginRight: 6 }} />
+          <Text style={[styles.primaryActionBtnText, { fontSize: scaleFont(12) }]}>Log Outflow</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => {
+            triggerHaptic('selection');
+            onEditBudget(budgetSummary.totalMonthlyBudget || 0);
+          }}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons name="target" size={16} color={colors.text} style={{ marginRight: 6 }} />
+          <Text style={[styles.secondaryActionBtnText, { color: colors.text, fontSize: scaleFont(12) }]}>
+            Set Limit
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.iconActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => {
+            triggerHaptic('selection');
+            onExport();
+          }}
+          activeOpacity={0.8}
+          accessibilityLabel="Export Ledger CSV Audit"
+        >
+          <Ionicons name="download-outline" size={17} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -127,21 +172,31 @@ export function HeroBudgetCard({
 
 const styles = StyleSheet.create({
   heroCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     padding: 18,
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  heroTopRow: {
+  trustHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  heroTitle: {
+  trustBeacon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: 5,
+  },
+  trustBeaconText: {
     fontWeight: '800',
-    letterSpacing: 1,
+    color: '#10b981',
+    letterSpacing: 0.6,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -152,52 +207,92 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontWeight: '700',
   },
-  heroAmount: {
+  headlineContainer: {
+    marginBottom: 12,
+  },
+  headlineSub: {
     fontWeight: '800',
+    letterSpacing: 0.8,
     marginBottom: 4,
   },
-  heroSubtitle: {
-    marginBottom: 16,
-    lineHeight: 17,
+  headlineMain: {
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  progressBarBackground: {
-    height: 6,
-    borderRadius: 3,
+  headlineCaption: {
+    fontWeight: '500',
+  },
+  gaugeContainer: {
+    marginBottom: 12,
+  },
+  gaugeTrack: {
+    height: 7,
+    borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 5,
   },
-  progressBarFill: {
+  gaugeFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 4,
   },
-  heroActionsRow: {
+  gaugeMetaRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  heroSetBudgetButton: {
+  gaugeMetaText: {
+    fontWeight: '600',
+  },
+  privacyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  privacyText: {
+    flex: 1,
+    fontWeight: '500',
+    lineHeight: 14,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  primaryActionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
-  heroSetBudgetText: {
-    fontWeight: '700',
+  primaryActionBtnText: {
     color: '#ffffff',
+    fontWeight: '800',
   },
-  heroLogSpendButton: {
+  secondaryActionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  heroLogSpendText: {
+  secondaryActionBtnText: {
     fontWeight: '700',
+  },
+  iconActionBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

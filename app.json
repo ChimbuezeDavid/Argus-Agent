@@ -2,7 +2,7 @@
   "expo": {
     "name": "argus-agent",
     "slug": "argus-agent",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "argusagent",
@@ -27,7 +27,11 @@
         "RECEIVE_BOOT_COMPLETED",
         "CALL_PHONE",
         "PACKAGE_USAGE_STATS",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "READ_SMS",
+        "RECEIVE_SMS",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
       ]
     },
     "web": {
@@ -40,9 +44,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/transparent.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#0A0A0C"
         }
       ],
       "expo-sqlite",

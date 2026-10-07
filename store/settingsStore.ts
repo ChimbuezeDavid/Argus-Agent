@@ -97,7 +97,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  apiKey: '',
+  apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || '',
   geminiModel: 'gemini-3.7-flash',
   currency: 'NGN',
   temperature: 0.2,
@@ -137,8 +137,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     set({ isLoading: true });
     try {
-      // 1. Load API Key from secure store
-      const apiKey = (await SecureStore.getItemAsync('GEMINI_API_KEY')) || '';
+      // 1. Load API Key from environment or secure store
+      const envKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+      const savedKey = (await SecureStore.getItemAsync('GEMINI_API_KEY')) || '';
+      const apiKey = envKey || savedKey;
 
       // 2. Load other settings from SQLite
       const db = await getDatabase();
@@ -149,7 +151,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         settingsMap[row.key] = row.value;
       });
 
-      const savedModel = settingsMap['gemini_model'] || 'gemini-3.7-flash';
+      let savedModel = settingsMap['gemini_model'] || 'gemini-3.7-flash';
+      if (savedModel.includes('3.5') || savedModel.includes('3.6') || savedModel.includes('1.5') || savedModel.includes('2.0')) {
+        savedModel = 'gemini-3.7-flash';
+      }
       const savedCurrency = settingsMap['primary_currency'] || 'NGN';
       const savedTemp = settingsMap['temperature'] ? parseFloat(settingsMap['temperature']) : 0.2;
       const savedSuggestions = settingsMap['show_suggestions'] !== '0';

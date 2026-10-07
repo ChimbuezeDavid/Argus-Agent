@@ -189,16 +189,16 @@ export async function transcribeAudioWithGemini(rawAudioPayload: string): Promis
     base64Data = parts[1];
   }
 
-  const apiKey = useSettingsStore.getState().apiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+  const apiKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || useSettingsStore.getState().apiKey || '').trim();
   if (!apiKey) {
     throw new Error('Gemini API key is required for voice intelligence.');
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const selectedModel = useSettingsStore.getState().geminiModel;
-  const targetModel = (selectedModel && !selectedModel.includes('1.5') && !selectedModel.includes('2.0'))
+  const targetModel = (selectedModel && !selectedModel.includes('1.5') && !selectedModel.includes('2.0') && !selectedModel.includes('3.5') && !selectedModel.includes('3.6'))
     ? selectedModel
-    : 'gemini-3.6-flash';
+    : 'gemini-3.7-flash';
 
   const model = genAI.getGenerativeModel({ model: targetModel });
 
