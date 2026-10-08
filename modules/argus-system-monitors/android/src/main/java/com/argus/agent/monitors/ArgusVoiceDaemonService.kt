@@ -330,7 +330,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                 removeFloatingCapsule()
 
                 val context = this
-                val layoutParams = WindowManager.LayoutParams().apply {
+                val wmParams = WindowManager.LayoutParams().apply {
                     type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     } else {
@@ -358,16 +358,16 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
                     // Dot indicator
                     val dot = View(context).apply {
-                        layoutParams = LinearLayout.LayoutParams(16, 16).apply {
-                            gravity = Gravity.CENTER_VERTICAL
-                            rightMargin = 16
-                        }
                         background = GradientDrawable().apply {
                             shape = GradientDrawable.OVAL
                             setColor(Color.parseColor("#34d399"))
                         }
                     }
-                    addView(dot)
+                    val dotParams = LinearLayout.LayoutParams(16, 16).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        rightMargin = 16
+                    }
+                    addView(dot, dotParams)
 
                     // Text label
                     val label = TextView(context).apply {
@@ -376,7 +376,13 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                         textSize = 13f
                         gravity = Gravity.CENTER_VERTICAL
                     }
-                    addView(label)
+                    val labelParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    addView(label, labelParams)
 
                     setOnClickListener {
                         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
@@ -388,7 +394,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 floatingCapsuleView = capsule
-                windowManager?.addView(capsule, layoutParams)
+                windowManager?.addView(capsule, wmParams)
 
                 // Auto-dismiss after 4 seconds
                 mainHandler.postDelayed({
