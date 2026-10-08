@@ -99,9 +99,20 @@ class HotwordController {
       });
       if (subError) this.listeners.push(subError);
 
-      // Kick off native speech recognition
+      // 5. Native Background Daemon wake word events (fires even when app is backgrounded)
+      const subDaemon = ArgusSystemMonitors.addSpeechListener('onWakeWordDetected', (data) => {
+        if (data?.command !== undefined && this.onCommandCallback) {
+          this.onCommandCallback(data.command);
+        }
+      });
+      if (subDaemon) this.listeners.push(subDaemon);
+
+      // Start native sticky background voice daemon
+      await ArgusSystemMonitors.startVoiceDaemon();
+
+      // Kick off native speech recognition in foreground
       await ArgusSystemMonitors.startSpeechRecognition();
-      console.log('[HotwordController] Continuous wake-word listener activated.');
+      console.log('[HotwordController] Continuous wake-word listener & background daemon activated.');
       return true;
     } catch (e) {
       console.warn('[HotwordController] Failed to initialize continuous listener:', e);
@@ -110,7 +121,7 @@ class HotwordController {
   }
 
   /**
-   * Stops the continuous wake word listener.
+   * Stops the continuous wake word listener and background daemon.
    */
   public async stopListening(): Promise<void> {
     this.isListening = false;
@@ -126,6 +137,7 @@ class HotwordController {
 
     try {
       await ArgusSystemMonitors.stopSpeechRecognition();
+      await ArgusSystemMonitors.stopVoiceDaemon();
     } catch {}
     console.log('[HotwordController] Continuous wake-word listener stopped.');
   }

@@ -203,6 +203,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         crashReportingEnabled: settingsMap['crash_reporting_enabled'] !== '0',
       });
 
+      if (savedAlwaysOnVoice) {
+        ArgusSystemMonitors.startVoiceDaemon().catch(() => {});
+      }
+
       // Automatically sync active system permission states on startup
       get().syncSystemPermissions();
     } catch (error) {
@@ -312,6 +316,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   toggleAlwaysOnVoice: async (enabled: boolean) => {
     await saveSetting('always_on_voice_enabled', enabled ? '1' : '0');
     set({ alwaysOnVoiceEnabled: enabled });
+    try {
+      if (enabled) {
+        await ArgusSystemMonitors.startVoiceDaemon();
+      } else {
+        await ArgusSystemMonitors.stopVoiceDaemon();
+      }
+    } catch (e) {
+      console.warn('Failed to toggle voice daemon:', e);
+    }
   },
 
   toggleAudioFeedback: async (enabled: boolean) => {

@@ -234,6 +234,25 @@ export default function ArgusHomeScreen() {
     }
   }, [voiceModalVisible, settings.alwaysOnVoiceEnabled]);
 
+  // Check if awakened by background Voice Daemon
+  useEffect(() => {
+    ArgusSystemMonitors.getLaunchWakeCommand()
+      .then((cmd) => {
+        if (cmd && cmd.trim()) {
+          const cleanCmd = cmd.trim();
+          if (cleanCmd.toLowerCase() === 'hey argus' || cleanCmd.toLowerCase() === 'argus') {
+            setVoiceModalVisible(true);
+            if (settings.audioFeedbackEnabled) {
+              voiceService.speak("I'm listening.");
+            }
+          } else {
+            handleExecuteVoiceAction(cleanCmd);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Content-Aware Keyboard Auto-Scroll
   useEffect(() => {
     const showSub = Keyboard.addListener(

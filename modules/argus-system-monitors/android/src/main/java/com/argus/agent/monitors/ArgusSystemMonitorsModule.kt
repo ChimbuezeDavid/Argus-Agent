@@ -48,7 +48,8 @@ class ArgusSystemMonitorsModule : Module() {
       "onSpeechResults",
       "onSpeechError",
       "onSpeechEnd",
-      "onSpeechRmsChanged"
+      "onSpeechRmsChanged",
+      "onWakeWordDetected"
     )
 
     // =========================================================================
@@ -711,27 +712,45 @@ class ArgusSystemMonitorsModule : Module() {
       }
     }
 
-    AsyncFunction("promptAndroidVoiceAssistant") { promise: Promise ->
-      val currentActivity = appContext.currentActivity
-      if (currentActivity == null) {
-        promise.resolve("")
-        return@AsyncFunction
+    AsyncFunction("startVoiceDaemon") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val intent = Intent(context, ArgusVoiceDaemonService::class.java)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+      } else {
+        context.startService(intent)
       }
+      true
+    }
 
-      mainHandler.post {
-        try {
-          val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to Argus Agent...")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-          }
-          pendingSpeechPromise = promise
-          currentActivity.startActivityForResult(intent, SPEECH_REQUEST_CODE)
-        } catch (e: Exception) {
-          promise.reject("SPEECH_ERROR", e.message ?: "Failed to launch Android Voice Assistant", e)
-          pendingSpeechPromise = null
-        }
+    AsyncFunction("stopVoiceDaemon") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val intent = Intent(context, ArgusVoiceDaemonService::class.java)
+      context.stopService(intent)
+      true
+    }
+
+    AsyncFunction("isVoiceDaemonRunning") { ->
+      ArgusVoiceDaemonService.isRunning
+    }
+
+    AsyncFunction("getLaunchWakeCommand") { ->
+      val activity = appContext.currentActivity ?: return@AsyncFunction ""
+      val cmd = activity.intent?.getStringExtra("wake_word_command") ?: ""
+      activity.intent?.removeExtra("wake_word_command")
+      cmd
+    }
+
+    OnCreate {
+      ArgusVoiceDaemonService.onWakeWordCallback = { command ->
+        sendEvent("onWakeWordDetected", Bundle().apply {
+          putString("command", command)
+        })
       }
+    }
+
+    OnDestroy {
+      ArgusVoiceDaemonService.onWakeWordCallback = null
     }
 
     // =========================================================================

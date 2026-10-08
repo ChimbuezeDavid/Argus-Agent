@@ -83,8 +83,18 @@ export interface ArgusSystemMonitorsType {
   startAudioCapture(): Promise<any>;
   stopAudioCapture(): Promise<string>;
   getAudioCaptureAmplitude(): Promise<number>;
+  startVoiceDaemon(): Promise<boolean>;
+  stopVoiceDaemon(): Promise<boolean>;
+  isVoiceDaemonRunning(): Promise<boolean>;
+  getLaunchWakeCommand(): Promise<string>;
   addSpeechListener(
-    event: 'onSpeechPartialResults' | 'onSpeechResults' | 'onSpeechError' | 'onSpeechEnd' | 'onSpeechRmsChanged',
+    event:
+      | 'onSpeechPartialResults'
+      | 'onSpeechResults'
+      | 'onSpeechError'
+      | 'onSpeechEnd'
+      | 'onSpeechRmsChanged'
+      | 'onWakeWordDetected',
     listener: (data: any) => void
   ): EventSubscription | null;
 
@@ -573,8 +583,50 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
     return 0;
   },
 
+  startVoiceDaemon: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.startVoiceDaemon === 'function') {
+        return await rawNativeModule.startVoiceDaemon();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  stopVoiceDaemon: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.stopVoiceDaemon === 'function') {
+        return await rawNativeModule.stopVoiceDaemon();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  isVoiceDaemonRunning: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.isVoiceDaemonRunning === 'function') {
+        return await rawNativeModule.isVoiceDaemonRunning();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  getLaunchWakeCommand: async (): Promise<string> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.getLaunchWakeCommand === 'function') {
+        return await rawNativeModule.getLaunchWakeCommand();
+      }
+    } catch (e) {}
+    return '';
+  },
+
   addSpeechListener: (
-    event: 'onSpeechPartialResults' | 'onSpeechResults' | 'onSpeechError' | 'onSpeechEnd' | 'onSpeechRmsChanged',
+    event:
+      | 'onSpeechPartialResults'
+      | 'onSpeechResults'
+      | 'onSpeechError'
+      | 'onSpeechEnd'
+      | 'onSpeechRmsChanged'
+      | 'onWakeWordDetected',
     listener: (data: any) => void
   ): EventSubscription | null => {
     try {
