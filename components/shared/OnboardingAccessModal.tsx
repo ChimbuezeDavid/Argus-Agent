@@ -10,8 +10,9 @@ import {
   PermissionsAndroid,
   AppState,
   Switch,
-  Alert,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -26,6 +27,7 @@ interface OnboardingAccessModalProps {
 }
 
 export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }: OnboardingAccessModalProps) {
+  const insets = useSafeAreaInsets();
   const { colors, scaleFont, triggerHaptic } = useHCITheme();
   const settings = useSettingsStore();
 
@@ -53,11 +55,11 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
           locStatus,
           bio,
         ] = await Promise.all([
-          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO),
+          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO).catch(() => false),
           ArgusSystemMonitors?.isIgnoringBatteryOptimizations?.() ?? Promise.resolve(false),
           ArgusSystemMonitors?.hasOverlayPermission?.() ?? Promise.resolve(false),
           ArgusSystemMonitors?.hasNotificationListenerPermission?.() ?? Promise.resolve(false),
-          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS),
+          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS).catch(() => false),
           ArgusSystemMonitors?.hasUsageStatsPermission?.() ?? Promise.resolve(false),
           ArgusSystemMonitors?.hasStoragePermission?.() ?? Promise.resolve(false),
           Location.getForegroundPermissionsAsync().catch(() => ({ granted: false })),
@@ -137,7 +139,7 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
       try {
         const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS, {
           title: 'SMS Permission',
-          message: 'Argus parses incoming debit alerts & bank receipts to update your budget ledger automatically.',
+          message: 'Argus parses incoming debit alerts and bank receipts to update your budget ledger automatically.',
           buttonPositive: 'Allow SMS Access',
         });
         setHasSmsPerm(granted === PermissionsAndroid.RESULTS.GRANTED);
@@ -150,11 +152,9 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
   const handleGrantLocation = async () => {
     triggerHaptic('selection');
     try {
+      // Only request standard foreground location to prevent disruptive redirection into OS settings
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        await Location.requestBackgroundPermissionsAsync().catch(() => {});
-        setHasLocationPerm(true);
-      }
+      setHasLocationPerm(status === 'granted');
     } catch (err) {
       console.warn(err);
     }
@@ -163,65 +163,79 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
   const handleFinish = async () => {
     triggerHaptic('success');
     await settings.completeOnboarding();
-    // If background voice is enabled, kick off the daemon immediately
     if (settings.alwaysOnVoiceEnabled && Platform.OS === 'android') {
       ArgusSystemMonitors?.startVoiceDaemon?.().catch(() => {});
     }
     onComplete();
   };
 
+  const topInset = Math.max(insets.top, Platform.OS === 'android' ? 36 : 48);
+  const bottomInset = Math.max(insets.bottom, 20) + 32;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={canDismiss ? onComplete : undefined}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={canDismiss ? onComplete : undefined}
+    >
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Top Bar with Optional Close */}
-        <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.topBarTitle, { color: colors.text, fontSize: scaleFont(14) }]}>
-            System Setup & Permissions
-          </Text>
+        {/* Safe Top Navigation Header */}
+        <View style={[styles.topBar, { paddingTop: topInset, borderBottomColor: colors.border }]}>
+          <View style={styles.topBarLeft}>
+            <Text style={[styles.topBarTitle, { color: colors.text, fontSize: scaleFont(14) }]}>
+              System Setup & Permissions
+            </Text>
+          </View>
           {canDismiss && (
-            <TouchableOpacity onPress={handleFinish} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
+            <TouchableOpacity
+              onPress={handleFinish}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={styles.closeBtn}
+            >
+              <Ionicons name="close-circle-sharp" size={26} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
         >
-          {/* Header Area */}
+          {/* Header Hero */}
           <View style={styles.headerArea}>
             <View style={[styles.shieldCircle, { backgroundColor: colors.primaryBg, borderColor: colors.primary }]}>
-              <Ionicons name="shield-checkmark" size={36} color={colors.primary} />
+              <Ionicons name="shield-checkmark" size={28} color={colors.primary} />
             </View>
-            <Text style={[styles.title, { color: colors.text, fontSize: scaleFont(20) }]}>
+            <Text style={[styles.title, { color: colors.text, fontSize: scaleFont(18) }]}>
               Argus Agent Access Control
             </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary, fontSize: scaleFont(12.5) }]}>
-              Grant device privileges so Argus can listen hands-free in the background, track expenses, and manage routines. All data stays 100% encrypted on your phone.
+            <Text style={[styles.subtitle, { color: colors.textSecondary, fontSize: scaleFont(12) }]}>
+              Grant device privileges so Argus can listen hands-free, track expenses, and manage routines. All data stays 100% encrypted and local on your phone.
             </Text>
           </View>
 
-          {/* SECTION 1: HANDS-FREE VOICE & BACKGROUND DAEMON */}
+          {/* GROUP 1: VOICE & BACKGROUND RUNTIME */}
           <View style={styles.sectionHeader}>
-            <Ionicons name="mic-outline" size={16} color="#3b82f6" style={{ marginRight: 6 }} />
-            <Text style={[styles.sectionHeaderText, { color: '#3b82f6', fontSize: scaleFont(12) }]}>
-              BACKGROUND VOICE & WAKE WORD (BIXBY ARCHITECTURE)
+            <Ionicons name="mic-outline" size={15} color="#3b82f6" style={{ marginRight: 6 }} />
+            <Text style={[styles.sectionHeaderText, { color: '#3b82f6', fontSize: scaleFont(11.5) }]}>
+              VOICE & BACKGROUND RUNTIME
             </Text>
           </View>
 
-          {/* 1.1 Microphone Permission */}
+          {/* 1.1 Microphone */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#3b82f620' }]}>
-                <Ionicons name="mic" size={20} color="#3b82f6" />
+              <View style={[styles.iconBox, { backgroundColor: '#3b82f618' }]}>
+                <Ionicons name="mic" size={18} color="#3b82f6" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Microphone Access
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Enables real-time acoustic listening and multimodal speech execution.
+                  Enables acoustic listening and multimodal speech execution.
                 </Text>
               </View>
             </View>
@@ -237,24 +251,24 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   onPress={handleGrantMic}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Grant Permission</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Grant Permission</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 1.2 Battery Optimization (Unrestricted Mode) */}
+          {/* 1.2 Battery Optimization */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#f59e0b20' }]}>
-                <Ionicons name="battery-charging" size={20} color="#f59e0b" />
+              <View style={[styles.iconBox, { backgroundColor: '#f59e0b18' }]}>
+                <Ionicons name="battery-charging" size={18} color="#f59e0b" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Battery Optimization (Unrestricted)
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Prevents Android from killing the Voice Daemon when the app is swiped away or closed.
+                  Prevents Android from killing the Voice Daemon when the app is swiped away.
                 </Text>
               </View>
             </View>
@@ -269,56 +283,58 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                 onPress={handleRequestBatteryOptim}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.grantBtnText, { color: '#f59e0b', fontSize: scaleFont(11) }]}>
+                <Text style={[styles.grantBtnText, { color: '#f59e0b', fontSize: scaleFont(11.5) }]}>
                   {hasBatteryOptimExempt ? 'Adjust Battery' : 'Set Unrestricted'}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* 1.3 Default Digital Assistant App */}
+          {/* 1.3 Default Digital Assistant */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#8b5cf620' }]}>
-                <Ionicons name="sparkles" size={20} color="#8b5cf6" />
+              <View style={[styles.iconBox, { backgroundColor: '#8b5cf618' }]}>
+                <Ionicons name="sparkles" size={18} color="#8b5cf6" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Default Digital Assistant App
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Required by Android 11+ to permit background microphone listening outside the app. Set Argus Agent as default.
+                  Required by Android 11+ to permit microphone access in the background. Set Argus Agent as default assistant.
                 </Text>
               </View>
             </View>
             <View style={styles.cardActionRow}>
-              <Text style={{ color: colors.textMuted, fontSize: scaleFont(11) }}>
-                Settings → Default Apps → Assistant
-              </Text>
+              <View style={styles.hintBadge}>
+                <Text style={[styles.hintBadgeText, { color: colors.textSecondary, fontSize: scaleFont(10.5) }]}>
+                  Default Apps
+                </Text>
+              </View>
               <TouchableOpacity
                 style={[styles.grantBtn, { backgroundColor: '#8b5cf620', borderColor: '#8b5cf6', borderWidth: 1 }]}
                 onPress={handleOpenAssistantSettings}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.grantBtnText, { color: '#8b5cf6', fontSize: scaleFont(11) }]}>
+                <Text style={[styles.grantBtnText, { color: '#8b5cf6', fontSize: scaleFont(11.5) }]}>
                   Open Assistant Settings
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* 1.4 Appear On Top (Floating Capsule Overlay) */}
+          {/* 1.4 Appear On Top */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#10b98120' }]}>
-                <Ionicons name="albums" size={20} color="#10b981" />
+              <View style={[styles.iconBox, { backgroundColor: '#10b98118' }]}>
+                <Ionicons name="albums" size={18} color="#10b981" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Appear On Top (Capsule Overlay)
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Displays the Samsung Bixby-style heads-up floating pill over any app when the wake word is detected.
+                  Displays the floating heads-up pill over other apps when wake word is spoken.
                 </Text>
               </View>
             </View>
@@ -334,30 +350,30 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   onPress={handleOpenOverlaySettings}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Grant Overlay</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Grant Overlay</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 1.5 Background Daemon Toggle */}
+          {/* 1.5 Background Daemon Switch */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#06b6d420' }]}>
-                <Ionicons name="radio" size={20} color="#06b6d4" />
+              <View style={[styles.iconBox, { backgroundColor: '#06b6d418' }]}>
+                <Ionicons name="radio" size={18} color="#06b6d4" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Activate Voice Daemon Now
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Keeps the sticky background listener active for "{settings.customWakeWord || 'Hey Argus'}" with a persistent notification.
+                  Runs continuous background listening for "{settings.customWakeWord || 'Hey Argus'}".
                 </Text>
               </View>
             </View>
             <View style={styles.cardActionRow}>
               <Text style={{ color: colors.textSecondary, fontSize: scaleFont(11.5), fontWeight: '600' }}>
-                {settings.alwaysOnVoiceEnabled ? 'Daemon Active' : 'Daemon Paused'}
+                {settings.alwaysOnVoiceEnabled ? 'Daemon Running' : 'Daemon Paused'}
               </Text>
               <Switch
                 value={settings.alwaysOnVoiceEnabled}
@@ -371,22 +387,22 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
             </View>
           </View>
 
-          {/* SECTION 2: AUTONOMOUS FINANCIAL PARSING */}
+          {/* GROUP 2: FINANCIAL & TRANSACTION INTERCEPTOR */}
           <View style={styles.sectionHeader}>
-            <Ionicons name="wallet-outline" size={16} color="#10b981" style={{ marginRight: 6 }} />
-            <Text style={[styles.sectionHeaderText, { color: '#10b981', fontSize: scaleFont(12) }]}>
-              BANK TRANSACTION INTERCEPTOR
+            <Ionicons name="wallet-outline" size={15} color="#10b981" style={{ marginRight: 6 }} />
+            <Text style={[styles.sectionHeaderText, { color: '#10b981', fontSize: scaleFont(11.5) }]}>
+              FINANCIAL & TRANSACTION INTERCEPTOR
             </Text>
           </View>
 
-          {/* 2.1 Notification Listener */}
+          {/* 2.1 Notifications */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#10b98120' }]}>
-                <Ionicons name="notifications" size={20} color="#10b981" />
+              <View style={[styles.iconBox, { backgroundColor: '#10b98118' }]}>
+                <Ionicons name="notifications" size={18} color="#10b981" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Notification Listener Access
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
@@ -409,20 +425,20 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Enable Access</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Enable Access</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 2.2 Direct SMS Inbox Access */}
+          {/* 2.2 SMS */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#10b98120' }]}>
-                <Ionicons name="chatbubble-ellipses" size={20} color="#10b981" />
+              <View style={[styles.iconBox, { backgroundColor: '#10b98118' }]}>
+                <Ionicons name="chatbubble-ellipses" size={18} color="#10b981" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Direct SMS Inbox Reading
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
@@ -442,28 +458,28 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   onPress={handleGrantSms}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Allow SMS</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Allow SMS</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* SECTION 3: SYSTEM CONTEXT & STORAGE */}
+          {/* GROUP 3: DEVICE CONTEXT & SECURITY */}
           <View style={styles.sectionHeader}>
-            <Ionicons name="hardware-chip-outline" size={16} color="#f43f5e" style={{ marginRight: 6 }} />
-            <Text style={[styles.sectionHeaderText, { color: '#f43f5e', fontSize: scaleFont(12) }]}>
-              CONTEXT & ENVIRONMENT
+            <Ionicons name="hardware-chip-outline" size={15} color="#f43f5e" style={{ marginRight: 6 }} />
+            <Text style={[styles.sectionHeaderText, { color: '#f43f5e', fontSize: scaleFont(11.5) }]}>
+              DEVICE CONTEXT & SECURITY
             </Text>
           </View>
 
           {/* 3.1 Location */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#f43f5e20' }]}>
-                <Ionicons name="location" size={20} color="#f43f5e" />
+              <View style={[styles.iconBox, { backgroundColor: '#f43f5e18' }]}>
+                <Ionicons name="location" size={18} color="#f43f5e" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Location & Boundary Geofences
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
@@ -483,24 +499,24 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   onPress={handleGrantLocation}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Grant Location</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Grant Location</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 3.2 Storage Access */}
+          {/* 3.2 Storage */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#0ea5e920' }]}>
-                <Ionicons name="folder-open" size={20} color="#0ea5e9" />
+              <View style={[styles.iconBox, { backgroundColor: '#0ea5e918' }]}>
+                <Ionicons name="folder-open" size={18} color="#0ea5e9" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Device File & Storage Manager
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Allows Argus to export budget reports, read local documents, and search device files.
+                  Allows Argus to export budget statements and inspect device files.
                 </Text>
               </View>
             </View>
@@ -519,20 +535,20 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Grant Storage</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Grant Storage</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 3.3 Screen Time Usage */}
+          {/* 3.3 Screen Time */}
           <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeaderRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#8b5cf620' }]}>
-                <Ionicons name="time" size={20} color="#8b5cf6" />
+              <View style={[styles.iconBox, { backgroundColor: '#8b5cf618' }]}>
+                <Ionicons name="time" size={18} color="#8b5cf6" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+              <View style={styles.cardTextCol}>
+                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                   Screen Time & Usage Telemetry
                 </Text>
                 <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
@@ -555,21 +571,21 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11) }]}>Grant Access</Text>
+                  <Text style={[styles.grantBtnText, { fontSize: scaleFont(11.5) }]}>Grant Access</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* 3.4 Hardware Biometric Lock */}
+          {/* 3.4 Biometric Lock */}
           {biometricAvailable && (
             <View style={[styles.permCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.cardHeaderRow}>
-                <View style={[styles.iconBox, { backgroundColor: '#eab30820' }]}>
-                  <Ionicons name="finger-print" size={20} color="#eab308" />
+                <View style={[styles.iconBox, { backgroundColor: '#eab30818' }]}>
+                  <Ionicons name="finger-print" size={18} color="#eab308" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+                <View style={styles.cardTextCol}>
+                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
                     Hardware Biometric Security
                   </Text>
                   <Text style={[styles.cardDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
@@ -594,17 +610,17 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
             </View>
           )}
 
-          {/* Brand-Specific Device Tip Card */}
+          {/* Device Tip */}
           <View style={[styles.tipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.tipHeaderRow}>
-              <Ionicons name="information-circle-outline" size={18} color="#38bdf8" style={{ marginRight: 6 }} />
-              <Text style={[styles.tipTitle, { color: colors.text, fontSize: scaleFont(12) }]}>
+              <Ionicons name="information-circle-outline" size={16} color="#38bdf8" style={{ marginRight: 6 }} />
+              <Text style={[styles.tipTitle, { color: colors.text, fontSize: scaleFont(11.5) }]}>
                 Tecno / Samsung / Xiaomi Device Tip
               </Text>
             </View>
-            <Text style={[styles.tipText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-              • On Tecno/Infinix: In <Text style={{ fontWeight: '700' }}>Phone Master → Auto-start management</Text>, ensure Argus is enabled.{"\n"}
-              • On Recent Apps screen: Pull down on Argus card and tap the <Text style={{ fontWeight: '700' }}>Lock 🔒</Text> icon so "Clear All" won't kill it.
+            <Text style={[styles.tipText, { color: colors.textSecondary, fontSize: scaleFont(10.5) }]}>
+              • Tecno/Infinix: In Phone Master → Auto-start management, ensure Argus is enabled.{"\n"}
+              • Recent Apps overview: Pull down on Argus card and tap the Lock 🔒 icon.
             </Text>
           </View>
 
@@ -614,9 +630,9 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
             onPress={handleFinish}
             activeOpacity={0.85}
           >
-            <Ionicons name="rocket-outline" size={20} color="#ffffff" style={{ marginRight: 8 }} />
-            <Text style={[styles.finishBtnText, { fontSize: scaleFont(14) }]}>
-              Save Setup & Launch Argus v2.0
+            <Ionicons name="checkmark-done" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={[styles.finishBtnText, { fontSize: scaleFont(13.5) }]}>
+              Done • Enter Argus Agent
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -634,46 +650,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 14 : 44,
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
+  topBarLeft: {
+    flex: 1,
+  },
   topBarTitle: {
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  closeBtn: {
+    marginLeft: 12,
   },
   scrollContent: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 16,
   },
   headerArea: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   shieldCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   title: {
     fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   subtitle: {
     textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 10,
+    lineHeight: 17,
+    paddingHorizontal: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 14,
     marginBottom: 8,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   sectionHeaderText: {
     fontWeight: '800',
@@ -682,7 +704,7 @@ const styles = StyleSheet.create({
   permCard: {
     borderRadius: 14,
     borderWidth: 1,
-    padding: 14,
+    padding: 13,
     marginBottom: 10,
   },
   cardHeaderRow: {
@@ -691,12 +713,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
+  },
+  cardTextCol: {
+    flex: 1,
   },
   cardTitle: {
     fontWeight: '700',
@@ -709,12 +734,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 4,
+    paddingTop: 2,
+    gap: 8,
   },
   statusBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badgeActive: {
     backgroundColor: '#10b98118',
@@ -726,10 +754,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 11,
   },
+  hintBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  hintBadgeText: {
+    fontWeight: '600',
+  },
   grantBtn: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 10,
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   grantBtnText: {
     color: '#ffffff',
@@ -739,19 +779,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 8,
+    marginBottom: 16,
   },
   tipHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   tipTitle: {
     fontWeight: '700',
   },
   tipText: {
-    lineHeight: 18,
+    lineHeight: 16,
   },
   finishBtn: {
     flexDirection: 'row',
@@ -761,7 +801,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
   },

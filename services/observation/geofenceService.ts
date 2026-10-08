@@ -113,7 +113,7 @@ export async function checkGeofencePermissions(): Promise<GeofencePermissionStat
 /**
  * Requests necessary location permissions from the user.
  */
-export async function requestGeofencePermissions(): Promise<GeofencePermissionStatus> {
+export async function requestGeofencePermissions(requestBackground: boolean = false): Promise<GeofencePermissionStatus> {
   try {
     let fg = await Location.getForegroundPermissionsAsync();
     if (!fg.granted) {
@@ -121,12 +121,15 @@ export async function requestGeofencePermissions(): Promise<GeofencePermissionSt
     }
 
     let bgGranted = false;
-    if (fg.granted) {
+    if (fg.granted && requestBackground) {
       let bg = await Location.getBackgroundPermissionsAsync();
       if (!bg.granted) {
         bg = await Location.requestBackgroundPermissionsAsync();
       }
       bgGranted = bg.granted;
+    } else if (fg.granted) {
+      const bgCheck = await Location.getBackgroundPermissionsAsync().catch(() => ({ granted: false }));
+      bgGranted = bgCheck.granted;
     }
 
     return {
@@ -146,15 +149,13 @@ export async function requestGeofencePermissions(): Promise<GeofencePermissionSt
 
 /**
  * Retrieves the device's live GPS coordinates and reverses geocode into human readable address.
+ * Never triggers permission dialogs spontaneously; returns null if not permitted.
  */
 export async function getCurrentGPSLocation(): Promise<CurrentLocationInfo | null> {
   try {
     const perm = await checkGeofencePermissions();
     if (!perm.foregroundGranted) {
-      const requested = await requestGeofencePermissions();
-      if (!requested.foregroundGranted) {
-        throw new Error('Location permission not granted by user.');
-      }
+      return null;
     }
 
     const pos = await Location.getCurrentPositionAsync({
