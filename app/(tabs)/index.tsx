@@ -359,7 +359,7 @@ export default function ArgusHomeScreen() {
       console.error('Argus Command execution error:', e);
       const isMissingKey = e.message === 'API_KEY_MISSING' || !settings.apiKey;
       const errorText = isMissingKey
-        ? 'Gemini intelligence engine is not configured in the application environment (.env).'
+        ? 'Gemini API key is not configured. Please open Settings ➔ AI Engine & Models to enter and save your Gemini API key.'
         : `Argus Agent encountered an error: ${e.message || 'Network / API error'}.`;
 
       setMessages((prev) => [

@@ -72,9 +72,8 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
 
-  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
-  const currentKey = settings.apiKey || envKey;
-  const hasCustomKey = !!settings.apiKey && settings.apiKey !== envKey;
+  const currentKey = settings.apiKey || '';
+  const hasKey = !!currentKey;
 
   const tempOptions: ChipOption[] = [
     { id: '0.0', label: '0.0', description: 'Precise' },
@@ -94,7 +93,7 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
       await settings.setApiKey(trimmed);
       setKeyInput('');
       triggerHaptic('success');
-      Alert.alert('Key Saved', 'Custom Gemini API key saved to device SecureStore.');
+      Alert.alert('Key Saved', 'Gemini API key saved to device SecureStore.');
     } catch (e: any) {
       Alert.alert('Save Error', e.message || 'Failed to save API key.');
     } finally {
@@ -102,21 +101,21 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
     }
   };
 
-  const handleResetToEnv = async () => {
+  const handleClearKey = async () => {
     triggerHaptic('warning');
     Alert.alert(
-      'Reset to .env Key',
-      'Remove your custom API key and fall back to the built-in .env key?',
+      'Remove API Key',
+      'Are you sure you want to delete your saved Gemini API key from this device?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
             await SecureStore.deleteItemAsync('GEMINI_API_KEY');
             await settings.setApiKey('');
             triggerHaptic('success');
-            Alert.alert('Reset Complete', 'Now using built-in environment API key.');
+            Alert.alert('Key Removed', 'Gemini API key removed from device.');
           },
         },
       ]
@@ -176,33 +175,31 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
   return (
     <View style={styles.container}>
       {/* 1. Interactive API Key Configuration Card */}
-      <View style={[styles.keyConfigCard, { backgroundColor: colors.surface, borderColor: hasCustomKey ? '#8b5cf6' : '#10b981' }]}>
+      <View style={[styles.keyConfigCard, { backgroundColor: colors.surface, borderColor: hasKey ? '#10b981' : '#f59e0b' }]}>
         <View style={styles.keyHeaderRow}>
           <View style={styles.keyBadge}>
             <Ionicons
-              name={hasCustomKey ? 'key-outline' : 'checkmark-circle'}
+              name={hasKey ? 'checkmark-circle' : 'key-outline'}
               size={16}
-              color={hasCustomKey ? '#8b5cf6' : '#10b981'}
+              color={hasKey ? '#10b981' : '#f59e0b'}
               style={{ marginRight: 6 }}
             />
             <Text
               style={[
                 styles.keyBadgeText,
-                { color: hasCustomKey ? '#8b5cf6' : '#10b981', fontSize: scaleFont(12) },
+                { color: hasKey ? '#10b981' : '#f59e0b', fontSize: scaleFont(12) },
               ]}
             >
-              {hasCustomKey ? 'Custom User Key Active' : 'Default (.env) Key Active'}
+              {hasKey ? 'API Key Active (On-Device)' : 'API Key Required'}
             </Text>
           </View>
-          <View style={[styles.activeDot, { backgroundColor: hasCustomKey ? '#8b5cf6' : '#10b981' }]} />
+          <View style={[styles.activeDot, { backgroundColor: hasKey ? '#10b981' : '#f59e0b' }]} />
         </View>
 
         <Text style={[styles.keyStatusText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-          {hasCustomKey
-            ? `Active Key: ••••••••••••${currentKey.slice(-6)} (Saved in SecureStore)`
-            : envKey
-            ? `Active Key: ••••••••••••${envKey.slice(-6)} (Loaded from .env)`
-            : 'No API key configured.'}
+          {hasKey
+            ? `Active Key: ••••••••••••${currentKey.slice(-6)} (Protected in SecureStore)`
+            : 'Enter your personal Google Gemini API key below to enable chat, voice, and intelligent agent actions.'}
         </Text>
 
         {/* Manual Input Field */}
@@ -272,14 +269,15 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
             )}
           </TouchableOpacity>
 
-          {hasCustomKey && (
+          {hasKey && (
             <TouchableOpacity
-              style={[styles.btnReset, { backgroundColor: `${colors.textMuted}20` }]}
-              onPress={handleResetToEnv}
+              style={[styles.btnReset, { backgroundColor: '#ef444420', flexDirection: 'row', alignItems: 'center' }]}
+              onPress={handleClearKey}
               activeOpacity={0.8}
             >
-              <Text style={[styles.btnResetText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                Reset to .env
+              <Ionicons name="trash-outline" size={13} color="#ef4444" style={{ marginRight: 4 }} />
+              <Text style={[styles.btnResetText, { color: '#ef4444', fontSize: scaleFont(11) }]}>
+                Remove Key
               </Text>
             </TouchableOpacity>
           )}

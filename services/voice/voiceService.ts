@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useVoiceStore } from '@/store/voiceStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { resolvePackageAlias } from '@/services/agent/toolRunner';
+import { getGeminiApiKey } from '@/services/agent/client';
 import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 
 export interface ParsedVoiceCommand {
@@ -189,9 +190,10 @@ export async function transcribeAudioWithGemini(rawAudioPayload: string): Promis
     base64Data = parts[1];
   }
 
-  const apiKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || useSettingsStore.getState().apiKey || '').trim();
+  const storedKey = await getGeminiApiKey();
+  const apiKey = (storedKey || useSettingsStore.getState().apiKey || '').trim();
   if (!apiKey) {
-    throw new Error('Gemini API key is required for voice intelligence.');
+    throw new Error('Gemini API key is required for voice intelligence. Please configure your key in Settings.');
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);

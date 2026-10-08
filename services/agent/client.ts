@@ -15,8 +15,6 @@ export async function getGeminiApiKey(): Promise<string | null> {
   } catch (error) {
     console.error('Failed to read Gemini API key from SecureStore:', error);
   }
-  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
-  if (envKey) return envKey;
   return null;
 }
 

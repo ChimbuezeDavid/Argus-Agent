@@ -97,8 +97,8 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || '',
-  geminiModel: 'gemini-3.7-flash',
+  apiKey: '',
+  geminiModel: 'gemini-3.8-flash',
   currency: 'NGN',
   temperature: 0.2,
   showSuggestions: true,
@@ -137,10 +137,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     set({ isLoading: true });
     try {
-      // 1. Load API Key from secure store (user custom key takes precedence) or environment fallback
-      const savedKey = (await SecureStore.getItemAsync('GEMINI_API_KEY')) || '';
-      const envKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-      const apiKey = savedKey || envKey;
+      // 1. Load API Key from on-device SecureStore
+      const apiKey = (await SecureStore.getItemAsync('GEMINI_API_KEY')) || '';
 
       // 2. Load other settings from SQLite
       const db = await getDatabase();
