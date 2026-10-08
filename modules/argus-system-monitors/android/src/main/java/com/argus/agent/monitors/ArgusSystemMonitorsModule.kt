@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Process
+import android.os.PowerManager
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.app.Activity
