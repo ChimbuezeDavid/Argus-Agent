@@ -71,7 +71,8 @@ export default function RootLayout() {
   // Trigger onboarding or biometric unlock after welcome splash completes
   const handleSplashFinish = async () => {
     setShowSplash(false);
-    if (!hasCompletedOnboarding) {
+    const completed = useSettingsStore.getState().hasCompletedOnboarding;
+    if (!completed) {
       setShowOnboarding(true);
     } else if (appLockEnabled) {
       setIsLocked(true);

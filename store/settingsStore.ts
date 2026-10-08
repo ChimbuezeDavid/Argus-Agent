@@ -56,6 +56,7 @@ interface SettingsState {
   // Actions
   loadSettings: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  resetOnboarding: () => Promise<void>;
   syncSystemPermissions: () => Promise<void>;
   setApiKey: (key: string) => Promise<void>;
   setGeminiModel: (model: string) => Promise<void>;
@@ -227,6 +228,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   completeOnboarding: async () => {
     await saveSetting('has_completed_onboarding', '1');
     set({ hasCompletedOnboarding: true });
+  },
+
+  resetOnboarding: async () => {
+    await saveSetting('has_completed_onboarding', '0');
+    set({ hasCompletedOnboarding: false });
   },
 
   syncSystemPermissions: async () => {

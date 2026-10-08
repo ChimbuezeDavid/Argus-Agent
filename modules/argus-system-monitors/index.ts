@@ -89,6 +89,9 @@ export interface ArgusSystemMonitorsType {
   setCustomWakeWord(word: string): Promise<boolean>;
   hasOverlayPermission(): Promise<boolean>;
   openOverlayPermissionSettings(): Promise<boolean>;
+  isIgnoringBatteryOptimizations(): Promise<boolean>;
+  requestIgnoreBatteryOptimizations(): Promise<boolean>;
+  openDefaultAssistantSettings(): Promise<boolean>;
   getLaunchWakeCommand(): Promise<string>;
   addSpeechListener(
     event:
@@ -635,6 +638,33 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
     try {
       if (rawNativeModule && typeof rawNativeModule.openOverlayPermissionSettings === 'function') {
         return await rawNativeModule.openOverlayPermissionSettings();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  isIgnoringBatteryOptimizations: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.isIgnoringBatteryOptimizations === 'function') {
+        return await rawNativeModule.isIgnoringBatteryOptimizations();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  requestIgnoreBatteryOptimizations: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.requestIgnoreBatteryOptimizations === 'function') {
+        return await rawNativeModule.requestIgnoreBatteryOptimizations();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  openDefaultAssistantSettings: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.openDefaultAssistantSettings === 'function') {
+        return await rawNativeModule.openDefaultAssistantSettings();
       }
     } catch (e) {}
     return false;

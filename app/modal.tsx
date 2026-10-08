@@ -35,6 +35,7 @@ import { DisplayThemeSection } from '@/components/settings/DisplayThemeSection';
 import { InteractionFeedbackSection } from '@/components/settings/InteractionFeedbackSection';
 import { CurrencySection } from '@/components/settings/CurrencySection';
 import { PrivacySection } from '@/components/settings/PrivacySection';
+import { OnboardingAccessModal } from '@/components/shared/OnboardingAccessModal';
 
 type SettingsCategory =
   | 'security'
@@ -61,6 +62,7 @@ export default function SettingsModal() {
   const { colors, scaleFont, triggerHaptic } = useHCITheme();
 
   const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(null);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
 
   useEffect(() => {
     settings.loadSettings();
@@ -222,6 +224,34 @@ export default function SettingsModal() {
       >
         {activeCategory === null ? (
           <>
+            {/* Quick Access: System Permissions & Background Setup */}
+            <TouchableOpacity
+              style={[styles.permissionsBanner, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setShowPermissionsModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.bannerIconBox, { backgroundColor: `${colors.primary}20` }]}>
+                <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.bannerTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
+                    System Permissions Setup
+                  </Text>
+                  <View style={[styles.bannerBadge, { backgroundColor: '#10b98120' }]}>
+                    <Text style={{ color: '#10b981', fontSize: scaleFont(9.5), fontWeight: '700' }}>v2.0 Checklist</Text>
+                  </View>
+                </View>
+                <Text style={[styles.bannerSubtitle, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
+                  Configure Assistant, Battery Optimization, and Background Mic privileges.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+
             {/* Android-Style Category Master List */}
             <View style={[styles.categoryListCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {CATEGORIES.map((cat, idx) => (
@@ -289,6 +319,13 @@ export default function SettingsModal() {
           </View>
         )}
       </ScrollView>
+
+      {/* Onboarding Access & Permissions Checklist Modal */}
+      <OnboardingAccessModal
+        visible={showPermissionsModal}
+        onComplete={() => setShowPermissionsModal(false)}
+        canDismiss={true}
+      />
     </View>
   );
 }
@@ -393,5 +430,34 @@ const styles = StyleSheet.create({
   footerText: {
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  permissionsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 16,
+  },
+  bannerIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  bannerTitle: {
+    fontWeight: '800',
+  },
+  bannerBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bannerSubtitle: {
+    marginTop: 2,
+    lineHeight: 15,
   },
 });

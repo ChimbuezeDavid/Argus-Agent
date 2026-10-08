@@ -171,7 +171,18 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun buildForegroundNotification(): Notification {
+    fun updateNotification(title: String, text: String) {
+        try {
+            val notification = buildForegroundNotification(title, text)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {}
+    }
+
+    private fun buildForegroundNotification(
+        title: String = "Argus Voice Active",
+        text: String = "Listening for '$customWakeWord' hands-free..."
+    ): Notification {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         val pendingIntent = if (launchIntent != null) {
             PendingIntent.getActivity(
@@ -185,8 +196,8 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         val iconRes = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.ic_btn_speak_now
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Argus Voice Active")
-            .setContentText("Listening for '$customWakeWord' hands-free...")
+            .setContentTitle(title)
+            .setContentText(text)
             .setSmallIcon(iconRes)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -222,7 +233,20 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                             scheduleRecognizerRestart(350)
                         }
                         override fun onError(error: Int) {
-                            scheduleRecognizerRestart(450)
+                            Log.d(TAG, "SpeechRecognizer ambient error code: $error")
+                            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                                try {
+                                    speechRecognizer?.cancel()
+                                    speechRecognizer?.destroy()
+                                } catch (e: Exception) {}
+                                speechRecognizer = null
+                                scheduleRecognizerRestart(800)
+                            } else if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                                updateNotification("Argus Voice Paused", "Microphone access requires Assistant permission")
+                                scheduleRecognizerRestart(3000)
+                            } else {
+                                scheduleRecognizerRestart(450)
+                            }
                         }
                         override fun onResults(results: Bundle?) {
                             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -441,6 +465,16 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch activity from background daemon: ${e.message}")
         }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.i(TAG, "onTaskRemoved: App swiped away from recents, keeping Voice Daemon alive")
+        acquireWakeLock()
+        val notification = buildForegroundNotification()
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.notify(NOTIFICATION_ID, notification)
+        scheduleRecognizerRestart(500)
     }
 
     override fun onDestroy() {

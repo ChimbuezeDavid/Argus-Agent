@@ -771,6 +771,63 @@ class ArgusSystemMonitorsModule : Module() {
       cmd
     }
 
+    AsyncFunction("isIgnoringBatteryOptimizations") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+      } else {
+        true
+      }
+    }
+
+    AsyncFunction("requestIgnoreBatteryOptimizations") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
+          context.startActivity(intent)
+          true
+        } else {
+          true
+        }
+      } catch (e: Exception) {
+        try {
+          val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
+          context.startActivity(fallback)
+          true
+        } catch (e2: Exception) {
+          false
+        }
+      }
+    }
+
+    AsyncFunction("openDefaultAssistantSettings") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      try {
+        val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        true
+      } catch (e: Exception) {
+        try {
+          val fallback = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
+          context.startActivity(fallback)
+          true
+        } catch (e2: Exception) {
+          false
+        }
+      }
+    }
+
     OnCreate {
       ArgusVoiceDaemonService.onWakeWordCallback = { command ->
         sendEvent("onWakeWordDetected", Bundle().apply {
