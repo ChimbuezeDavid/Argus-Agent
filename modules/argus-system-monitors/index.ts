@@ -86,6 +86,9 @@ export interface ArgusSystemMonitorsType {
   startVoiceDaemon(): Promise<boolean>;
   stopVoiceDaemon(): Promise<boolean>;
   isVoiceDaemonRunning(): Promise<boolean>;
+  setCustomWakeWord(word: string): Promise<boolean>;
+  hasOverlayPermission(): Promise<boolean>;
+  openOverlayPermissionSettings(): Promise<boolean>;
   getLaunchWakeCommand(): Promise<string>;
   addSpeechListener(
     event:
@@ -605,6 +608,33 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
     try {
       if (rawNativeModule && typeof rawNativeModule.isVoiceDaemonRunning === 'function') {
         return await rawNativeModule.isVoiceDaemonRunning();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  setCustomWakeWord: async (word: string): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.setCustomWakeWord === 'function') {
+        return await rawNativeModule.setCustomWakeWord(word);
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  hasOverlayPermission: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.hasOverlayPermission === 'function') {
+        return await rawNativeModule.hasOverlayPermission();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  openOverlayPermissionSettings: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.openOverlayPermissionSettings === 'function') {
+        return await rawNativeModule.openOverlayPermissionSettings();
       }
     } catch (e) {}
     return false;

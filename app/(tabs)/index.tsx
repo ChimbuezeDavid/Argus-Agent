@@ -240,7 +240,15 @@ export default function ArgusHomeScreen() {
       .then((cmd) => {
         if (cmd && cmd.trim()) {
           const cleanCmd = cmd.trim();
-          if (cleanCmd.toLowerCase() === 'hey argus' || cleanCmd.toLowerCase() === 'argus') {
+          const customWord = (settings.customWakeWord || 'Hey Argus').toLowerCase().trim();
+          const cleanLower = cleanCmd.toLowerCase();
+          const isJustWakeWord =
+            cleanLower === 'hey argus' ||
+            cleanLower === 'argus' ||
+            cleanLower === customWord ||
+            cleanLower === customWord.replace(/^(?:hey|hi|hello|ok|okay)\s+/i, '');
+
+          if (isJustWakeWord) {
             setVoiceModalVisible(true);
             if (settings.audioFeedbackEnabled) {
               voiceService.speak("I'm listening.");

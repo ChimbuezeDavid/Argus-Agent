@@ -11,6 +11,36 @@ export const HOTWORD_PATTERNS = [
   /^argus$/i,
 ];
 
+export function buildWakeWordPatterns(customWakeWord?: string): RegExp[] {
+  const defaultPatterns = [
+    /^(?:hey|hi|hello|ok|okay)\s+argus[,\s]*(.*)$/i,
+    /^argus[,\s]+(.*)$/i,
+    /^hey\s+agent[,\s]*(.*)$/i,
+    /^argus$/i,
+  ];
+
+  if (!customWakeWord) return defaultPatterns;
+
+  const trimmed = customWakeWord.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'hey argus' || trimmed.toLowerCase() === 'argus') {
+    return defaultPatterns;
+  }
+
+  // Strip prefix like "hey", "hi", "ok", "okay" to get the root target
+  const stripped = trimmed.replace(/^(?:hey|hi|hello|ok|okay)\s+/i, '').trim();
+  const escapedRoot = stripped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedFull = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const customList = [
+    new RegExp(`^(?:hey|hi|hello|ok|okay)\\s+${escapedRoot}[,\\s]*(.*)$`, 'i'),
+    new RegExp(`^${escapedRoot}[,\\s]+(.*)$`, 'i'),
+    new RegExp(`^${escapedRoot}$`, 'i'),
+    new RegExp(`^${escapedFull}[,\\s]*(.*)$`, 'i'),
+  ];
+
+  return [...customList, ...defaultPatterns];
+}
+
 export interface HotwordDetectionResult {
   detected: boolean;
   command: string;
@@ -20,21 +50,23 @@ export interface HotwordDetectionResult {
 /**
  * Checks a speech transcript against wake-word patterns.
  */
-export function evaluateHotword(speechTranscript: string): HotwordDetectionResult {
+export function evaluateHotword(speechTranscript: string, overrideCustomWord?: string): HotwordDetectionResult {
   if (!speechTranscript || typeof speechTranscript !== 'string') {
     return { detected: false, command: '' };
   }
 
   const clean = speechTranscript.trim();
+  const customWord = overrideCustomWord || useSettingsStore.getState().customWakeWord || 'Hey Argus';
+  const patterns = buildWakeWordPatterns(customWord);
 
-  for (const pattern of HOTWORD_PATTERNS) {
+  for (const pattern of patterns) {
     const match = clean.match(pattern);
     if (match) {
       const remainingCommand = match[1]?.trim() || '';
       return {
         detected: true,
         command: remainingCommand,
-        matchedTrigger: 'Hey Argus',
+        matchedTrigger: customWord,
       };
     }
   }

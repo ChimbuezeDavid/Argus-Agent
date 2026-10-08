@@ -24,6 +24,7 @@ interface SettingsState {
   appLockTimeout: number; // In seconds: 0, 60, 300, 900, 3600
   alwaysOnVoiceEnabled: boolean;
   audioFeedbackEnabled: boolean;
+  customWakeWord: string;
   hasCompletedOnboarding: boolean;
   isLoading: boolean;
 
@@ -68,6 +69,7 @@ interface SettingsState {
   setAppLockTimeout: (seconds: number) => Promise<void>;
   toggleAlwaysOnVoice: (enabled: boolean) => Promise<void>;
   toggleAudioFeedback: (enabled: boolean) => Promise<void>;
+  setCustomWakeWord: (word: string) => Promise<void>;
   toggleSuggestions: (enabled: boolean) => Promise<void>;
   toggleAutoCategorize: (enabled: boolean) => Promise<void>;
   toggleGeofenceTracking: (enabled: boolean) => Promise<void>;
@@ -112,6 +114,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   appLockTimeout: 0,
   alwaysOnVoiceEnabled: false,
   audioFeedbackEnabled: false,
+  customWakeWord: 'Hey Argus',
   isLoading: false,
 
   // HCI Defaults
@@ -163,6 +166,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const savedLockTimeout = settingsMap['app_lock_timeout'] ? parseInt(settingsMap['app_lock_timeout'], 10) : 0;
       const savedAlwaysOnVoice = settingsMap['always_on_voice_enabled'] === '1';
       const savedAudioFeedback = settingsMap['audio_feedback_enabled'] === '1';
+      const savedWakeWord = settingsMap['custom_wake_word'] || 'Hey Argus';
       const savedOnboarding = settingsMap['has_completed_onboarding'] === '1';
 
       set({
@@ -178,6 +182,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         appLockTimeout: savedLockTimeout,
         alwaysOnVoiceEnabled: savedAlwaysOnVoice,
         audioFeedbackEnabled: savedAudioFeedback,
+        customWakeWord: savedWakeWord,
         hasCompletedOnboarding: savedOnboarding,
         geofenceTracking: settingsMap['geofence_tracking_enabled'] === '1',
         notificationsTracking: settingsMap['notifications_tracking_enabled'] === '1',
@@ -203,8 +208,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         crashReportingEnabled: settingsMap['crash_reporting_enabled'] !== '0',
       });
 
-      if (savedAlwaysOnVoice) {
-        ArgusSystemMonitors.startVoiceDaemon().catch(() => {});
+      if (Platform.OS === 'android') {
+        ArgusSystemMonitors.setCustomWakeWord(savedWakeWord).catch(() => {});
+        if (savedAlwaysOnVoice) {
+          ArgusSystemMonitors.startVoiceDaemon().catch(() => {});
+        }
       }
 
       // Automatically sync active system permission states on startup
@@ -324,6 +332,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
     } catch (e) {
       console.warn('Failed to toggle voice daemon:', e);
+    }
+  },
+
+  setCustomWakeWord: async (word: string) => {
+    const trimmed = word.trim() || 'Hey Argus';
+    await saveSetting('custom_wake_word', trimmed);
+    set({ customWakeWord: trimmed });
+    try {
+      if (Platform.OS === 'android') {
+        await ArgusSystemMonitors.setCustomWakeWord(trimmed);
+      }
+    } catch (e) {
+      console.warn('Failed to set custom wake word on native daemon:', e);
     }
   },
 

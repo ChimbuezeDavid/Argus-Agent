@@ -8,6 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -17,19 +20,30 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 
 /**
- * Argus Voice Daemon Service (Bixby-style persistent native background listener).
+ * Argus Voice Daemon Service (Bixby-style persistent native background listener & overlay).
  * Runs as a sticky Android Foreground Service with FOREGROUND_SERVICE_TYPE_MICROPHONE.
- * Keeps listening for "Hey Argus" even when the app is minimized, closed, or screen is locked.
+ * Features:
+ * 1. Persistent background microphone acoustic recognition loop.
+ * 2. Customizable wake-word spotting ("Hey Argus", "Hey Dave", "Dave", "Hey Gee", "Siri").
+ * 3. Bixby-style floating heads-up capsule overlay (SYSTEM_ALERT_WINDOW).
+ * 4. Native on-device Text-to-Speech (TTS) audio feedback.
  */
-class ArgusVoiceDaemonService : Service() {
+class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
     companion object {
         const val TAG = "ArgusVoiceDaemon"
@@ -44,14 +58,23 @@ class ArgusVoiceDaemonService : Service() {
         var instance: ArgusVoiceDaemonService? = null
             private set
 
+        @Volatile
+        var customWakeWord: String = "Hey Argus"
+
         var onWakeWordCallback: ((String) -> Unit)? = null
     }
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isRestarting = false
     private var isDestroyed = false
+
+    private var windowManager: WindowManager? = null
+    private var floatingCapsuleView: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,12 +82,34 @@ class ArgusVoiceDaemonService : Service() {
         super.onCreate()
         instance = this
         Log.i(TAG, "ArgusVoiceDaemonService onCreate")
+
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+
+        try {
+            tts = TextToSpeech(this, this)
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS initialization failed: ${e.message}")
+        }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            ttsReady = true
+            tts?.language = Locale.US
+            tts?.setPitch(1.0f)
+            tts?.setSpeechRate(1.05f)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "ArgusVoiceDaemonService onStartCommand")
         isRunning = true
         isDestroyed = false
+
+        val incomingWakeWord = intent?.getStringExtra("custom_wake_word")
+        if (!incomingWakeWord.isNullOrBlank()) {
+            customWakeWord = incomingWakeWord.trim()
+        }
 
         acquireWakeLock()
         createNotificationChannel()
@@ -140,8 +185,8 @@ class ArgusVoiceDaemonService : Service() {
         val iconRes = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.ic_btn_speak_now
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Argus Voice Guard Active")
-            .setContentText("Listening for 'Hey Argus' hands-free...")
+            .setContentTitle("Argus Voice Active")
+            .setContentText("Listening for '$customWakeWord' hands-free...")
             .setSmallIcon(iconRes)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -177,7 +222,6 @@ class ArgusVoiceDaemonService : Service() {
                             scheduleRecognizerRestart(350)
                         }
                         override fun onError(error: Int) {
-                            // On timeouts or no match, quietly restart
                             scheduleRecognizerRestart(450)
                         }
                         override fun onResults(results: Bundle?) {
@@ -227,15 +271,26 @@ class ArgusVoiceDaemonService : Service() {
         if (transcript.isBlank()) return
 
         val clean = transcript.trim().lowercase(Locale.ROOT)
-        val pattern = Regex("^(?:hey|hi|hello|ok|okay)?\\s*argus[\\s,]*(.*)$", RegexOption.IGNORE_CASE)
-        val match = pattern.find(clean)
+        val trigger = customWakeWord.trim().lowercase(Locale.ROOT)
+        val core = trigger.replace(Regex("^(?:hey|hi|hello|ok|okay)\\s+"), "")
 
-        if (match != null) {
-            val command = match.groupValues.getOrNull(1)?.trim() ?: ""
-            Log.i(TAG, "Wake word triggered! Command: '$command'")
+        val patterns = listOf(
+            Regex("^(?:hey|hi|hello|ok|okay)?\\s*${Regex.escape(trigger)}[\\s,]*(.*)$", RegexOption.IGNORE_CASE),
+            Regex("^(?:hey|hi|hello|ok|okay)?\\s*${Regex.escape(core)}[\\s,]*(.*)$", RegexOption.IGNORE_CASE),
+            Regex("^(?:hey|hi|hello|ok|okay)?\\s*argus[\\s,]*(.*)$", RegexOption.IGNORE_CASE)
+        )
 
-            triggerHapticAlert()
-            wakeUpAndExecute(command)
+        for (pattern in patterns) {
+            val match = pattern.find(clean)
+            if (match != null) {
+                val command = match.groupValues.getOrNull(1)?.trim() ?: ""
+                Log.i(TAG, "Custom wake word '$trigger' triggered! Command: '$command'")
+
+                triggerHapticAlert()
+                showBixbyFloatingCapsule(command.ifEmpty { "I'm listening..." })
+                wakeUpAndExecute(command)
+                return
+            }
         }
     }
 
@@ -261,11 +316,113 @@ class ArgusVoiceDaemonService : Service() {
         }
     }
 
+    /**
+     * Bixby-Style Floating Heads-Up Capsule Overlay
+     * Displays a compact, sleek frosted pill over the current screen.
+     */
+    private fun showBixbyFloatingCapsule(message: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            return
+        }
+
+        mainHandler.post {
+            try {
+                removeFloatingCapsule()
+
+                val context = this
+                val layoutParams = WindowManager.LayoutParams().apply {
+                    type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WindowManager.LayoutParams.TYPE_PHONE
+                    }
+                    format = PixelFormat.TRANSLUCENT
+                    flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                    width = WindowManager.LayoutParams.WRAP_CONTENT
+                    height = WindowManager.LayoutParams.WRAP_CONTENT
+                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    y = 120 // 120px above bottom bar
+                }
+
+                val capsule = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(36, 20, 36, 20)
+                    background = GradientDrawable().apply {
+                        cornerRadius = 50f
+                        setColor(Color.parseColor("#1e1b4b"))
+                        setStroke(2, Color.parseColor("#6366f1"))
+                    }
+
+                    // Dot indicator
+                    val dot = View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(16, 16).apply {
+                            gravity = Gravity.CENTER_VERTICAL
+                            rightMargin = 16
+                        }
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.parseColor("#34d399"))
+                        }
+                    }
+                    addView(dot)
+
+                    // Text label
+                    val label = TextView(context).apply {
+                        text = "Argus • $message"
+                        setTextColor(Color.WHITE)
+                        textSize = 13f
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    addView(label)
+
+                    setOnClickListener {
+                        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        if (launchIntent != null) startActivity(launchIntent)
+                        removeFloatingCapsule()
+                    }
+                }
+
+                floatingCapsuleView = capsule
+                windowManager?.addView(capsule, layoutParams)
+
+                // Auto-dismiss after 4 seconds
+                mainHandler.postDelayed({
+                    removeFloatingCapsule()
+                }, 4000)
+            } catch (e: Exception) {
+                Log.w(TAG, "Floating capsule display error: ${e.message}")
+            }
+        }
+    }
+
+    private fun removeFloatingCapsule() {
+        try {
+            if (floatingCapsuleView != null) {
+                windowManager?.removeView(floatingCapsuleView)
+                floatingCapsuleView = null
+            }
+        } catch (e: Exception) {}
+    }
+
+    /**
+     * Speaks audio feedback directly through native Text-to-Speech.
+     */
+    fun speakFeedback(text: String) {
+        if (ttsReady && tts != null && text.isNotBlank()) {
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "argus_daemon_tts")
+        }
+    }
+
     private fun wakeUpAndExecute(command: String) {
         // 1. Notify static callback if React Native is attached
         onWakeWordCallback?.invoke(command)
 
-        // 2. Launch or bring MainActivity to the foreground if closed
+        // 2. Launch or bring MainActivity to the foreground
         try {
             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -288,12 +445,20 @@ class ArgusVoiceDaemonService : Service() {
         instance = null
 
         mainHandler.removeCallbacksAndMessages(null)
+        removeFloatingCapsule()
         releaseWakeLock()
 
         try {
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()
             speechRecognizer = null
+        } catch (e: Exception) {}
+
+        try {
+            tts?.stop()
+            tts?.shutdown()
+            tts = null
+            ttsReady = false
         } catch (e: Exception) {}
     }
 }

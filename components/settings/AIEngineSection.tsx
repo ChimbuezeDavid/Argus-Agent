@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { SectionCard, ToggleRow, ChipSelector, ChipOption } from '@/components/shared';
+import ArgusSystemMonitors from '@/modules/argus-system-monitors';
+
+export const WAKE_WORD_PRESETS: ChipOption[] = [
+  { id: 'Hey Argus', label: 'Hey Argus' },
+  { id: 'Hey Dave', label: 'Hey Dave' },
+  { id: 'Dave', label: 'Dave' },
+  { id: 'Hey Gee', label: 'Hey Gee' },
+  { id: 'Gee', label: 'Gee' },
+  { id: 'Siri', label: 'Siri' },
+];
 
 export interface ModelOption {
   id: string;
@@ -80,6 +90,46 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
     { id: '0.2', label: '0.2', description: 'Balanced' },
     { id: '0.7', label: '0.7', description: 'Creative' },
   ];
+
+  // Wake Word & Bixby Capsule State
+  const [customWakeWordInput, setCustomWakeWordInput] = useState(settings.customWakeWord || 'Hey Argus');
+  const [hasOverlayPerm, setHasOverlayPerm] = useState(false);
+
+  useEffect(() => {
+    if (settings.customWakeWord) {
+      setCustomWakeWordInput(settings.customWakeWord);
+    }
+  }, [settings.customWakeWord]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      ArgusSystemMonitors?.hasOverlayPermission?.().then(setHasOverlayPerm).catch(() => {});
+    }
+  }, []);
+
+  const handleSaveWakeWord = async (wordToSave?: string) => {
+    const target = (wordToSave !== undefined ? wordToSave : customWakeWordInput).trim() || 'Hey Argus';
+    triggerHaptic('selection');
+    try {
+      await settings.setCustomWakeWord(target);
+      setCustomWakeWordInput(target);
+      triggerHaptic('success');
+      Alert.alert('Wake Word Updated', `Argus will now awaken to "${target}".`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update wake word.');
+    }
+  };
+
+  const handleRequestOverlayPerm = async () => {
+    triggerHaptic('selection');
+    if (Platform.OS === 'android') {
+      await ArgusSystemMonitors?.openOverlayPermissionSettings?.();
+      setTimeout(async () => {
+        const granted = await ArgusSystemMonitors?.hasOverlayPermission?.();
+        setHasOverlayPerm(!!granted);
+      }, 1500);
+    }
+  };
 
   const handleSaveCustomKey = async () => {
     const trimmed = keyInput.trim();
@@ -391,17 +441,99 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
       <SectionCard
         icon={<Ionicons name="mic-outline" size={scaleFont(20)} color="#10b981" style={{ marginRight: 8 }} />}
         title="Hands-Free Voice & Wake Word"
-        subtitle="Control your device hands-free using the 'Hey Argus' acoustic wake word."
+        subtitle="Control your device hands-free using continuous background acoustic sensing."
       >
         <ToggleRow
-          label="'Hey Argus' Wake Word"
-          description="Continuously listen for 'Hey Argus' to awaken the agent hands-free without touching the screen"
+          label="Background Wake Word Daemon"
+          description="Sticky Android service keeping microphone active even when Argus is closed or backgrounded"
           value={settings.alwaysOnVoiceEnabled}
           onValueChange={(val) => {
             triggerHaptic('selection');
             settings.toggleAlwaysOnVoice(val);
           }}
         />
+
+        {/* Custom Wake Word Selector */}
+        <View style={{ marginTop: 14 }}>
+          <Text style={[styles.subLabel, { color: colors.text, fontSize: scaleFont(12) }]}>
+            Active Wake Trigger: <Text style={{ color: colors.primary, fontWeight: '700' }}>"{settings.customWakeWord || 'Hey Argus'}"</Text>
+          </Text>
+          <Text style={[styles.subDesc, { color: colors.textSecondary, fontSize: scaleFont(11), marginBottom: 8 }]}>
+            Select a preset trigger or type any custom hotword below.
+          </Text>
+
+          <ChipSelector
+            options={WAKE_WORD_PRESETS}
+            selectedId={settings.customWakeWord || 'Hey Argus'}
+            onSelect={(id) => {
+              handleSaveWakeWord(id);
+            }}
+          />
+
+          {/* Custom Input */}
+          <View style={[styles.wakeWordInputRow, { marginTop: 10 }]}>
+            <TextInput
+              style={[
+                styles.wakeWordInput,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.border,
+                  fontSize: scaleFont(12),
+                },
+              ]}
+              placeholder="Or type custom (e.g. 'Jarvis', 'Hey Friday')"
+              placeholderTextColor={colors.textMuted}
+              value={customWakeWordInput}
+              onChangeText={setCustomWakeWordInput}
+              autoCapitalize="words"
+            />
+            {customWakeWordInput.trim() !== (settings.customWakeWord || 'Hey Argus') && (
+              <TouchableOpacity
+                style={[styles.btnSaveWord, { backgroundColor: colors.primary }]}
+                onPress={() => handleSaveWakeWord()}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.btnSaveWordText, { fontSize: scaleFont(11) }]}>Save</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Floating Capsule Overlay Permission (Bixby style) */}
+        <View style={[styles.overlayPermCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <View style={styles.overlayPermHeader}>
+            <Ionicons
+              name={hasOverlayPerm ? 'albums' : 'albums-outline'}
+              size={18}
+              color={hasOverlayPerm ? '#10b981' : '#f59e0b'}
+              style={{ marginRight: 8 }}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.overlayPermTitle, { color: colors.text, fontSize: scaleFont(12) }]}>
+                Bixby Heads-Up Capsule Overlay
+              </Text>
+              <Text style={[styles.overlayPermDesc, { color: colors.textSecondary, fontSize: scaleFont(10.5) }]}>
+                {hasOverlayPerm
+                  ? 'Active: Floating capsule appears over any app when wake word triggers.'
+                  : 'Grant "Appear on top" permission to show the floating capsule outside the app.'}
+              </Text>
+            </View>
+          </View>
+
+          {!hasOverlayPerm && Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={[styles.btnOverlayPerm, { backgroundColor: '#f59e0b20', borderColor: '#f59e0b' }]}
+              onPress={handleRequestOverlayPerm}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={13} color="#f59e0b" style={{ marginRight: 4 }} />
+              <Text style={[styles.btnOverlayPermText, { color: '#f59e0b', fontSize: scaleFont(11) }]}>
+                Grant Overlay Permission
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <ToggleRow
           label="Spoken Audio Feedback"
@@ -411,7 +543,7 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
             triggerHaptic('selection');
             settings.toggleAudioFeedback(val);
           }}
-          style={{ marginTop: 10 }}
+          style={{ marginTop: 12 }}
         />
       </SectionCard>
     </View>
@@ -540,5 +672,64 @@ const styles = StyleSheet.create({
   },
   modelMeta: {
     fontWeight: '600',
+  },
+  subLabel: {
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  subDesc: {
+    lineHeight: 15,
+  },
+  wakeWordInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  wakeWordInput: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  btnSaveWord: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnSaveWordText: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  overlayPermCard: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+  },
+  overlayPermHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  overlayPermTitle: {
+    fontWeight: '700',
+  },
+  overlayPermDesc: {
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  btnOverlayPerm: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  btnOverlayPermText: {
+    fontWeight: '700',
   },
 });

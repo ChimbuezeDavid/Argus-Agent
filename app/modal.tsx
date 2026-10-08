@@ -221,8 +221,9 @@ export default function SettingsModal() {
         ]}
       >
         {activeCategory === null ? (
-          /* Android-Style Category Master List */
-          <View style={[styles.categoryListCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <>
+            {/* Android-Style Category Master List */}
+            <View style={[styles.categoryListCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {CATEGORIES.map((cat, idx) => (
               <React.Fragment key={cat.id}>
                 <TouchableOpacity
@@ -267,6 +268,14 @@ export default function SettingsModal() {
               </React.Fragment>
             ))}
           </View>
+
+          {/* Version Footer */}
+          <View style={styles.footerWrap}>
+            <Text style={[styles.footerText, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
+              Argus Agent v2.0.0 • On-Device Neural Executive
+            </Text>
+          </View>
+        </>
         ) : (
           /* Hierarchical Detailed Category Sub-Page */
           <View style={styles.detailWrapper}>
@@ -374,5 +383,15 @@ const styles = StyleSheet.create({
   },
   detailWrapper: {
     gap: 14,
+  },
+  footerWrap: {
+    marginTop: 24,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerText: {
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

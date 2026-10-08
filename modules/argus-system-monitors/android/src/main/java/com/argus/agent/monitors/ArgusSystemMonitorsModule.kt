@@ -734,6 +734,36 @@ class ArgusSystemMonitorsModule : Module() {
       ArgusVoiceDaemonService.isRunning
     }
 
+    AsyncFunction("setCustomWakeWord") { word: String ->
+      ArgusVoiceDaemonService.customWakeWord = word
+      true
+    }
+
+    AsyncFunction("hasOverlayPermission") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        Settings.canDrawOverlays(context)
+      } else {
+        true
+      }
+    }
+
+    AsyncFunction("openOverlayPermissionSettings") { ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val intent = Intent(
+          Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+          Uri.parse("package:${context.packageName}")
+        ).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        true
+      } else {
+        false
+      }
+    }
+
     AsyncFunction("getLaunchWakeCommand") { ->
       val activity = appContext.currentActivity ?: return@AsyncFunction ""
       val cmd = activity.intent?.getStringExtra("wake_word_command") ?: ""
