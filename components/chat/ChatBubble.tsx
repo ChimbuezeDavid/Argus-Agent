@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from '@/components/Themed';
 import * as voiceService from '@/services/voice/voiceService';
 import { useHCITheme } from '@/hooks/useHCITheme';
+import { RichMessageRenderer } from './RichMessageRenderer';
 
 interface Message {
   id: string;
@@ -57,16 +58,7 @@ export function ChatBubble({ item, copiedId, onCopy }: ChatBubbleProps) {
             : [styles.bubbleAssistant, { backgroundColor: colors.card, borderColor: colors.border }],
         ]}
       >
-        <Text
-          selectable={true}
-          style={[
-            styles.bubbleText,
-            { fontSize: scaleFont(13) },
-            isUser ? styles.bubbleTextUser : [styles.bubbleTextAssistant, { color: colors.text }],
-          ]}
-        >
-          {item.content}
-        </Text>
+        <RichMessageRenderer content={item.content} isUser={isUser} selectable={true} />
 
         {/* Tool Action Proof Badges */}
         {item.toolCalls && Array.isArray(item.toolCalls) && item.toolCalls.filter(Boolean).length > 0 && (
