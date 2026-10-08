@@ -6,20 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Switch,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ModalSheet } from '@/components/shared/ModalSheet';
 import {
   PlanItem,
   DaySchedule,
-  ScheduleTimeBlock,
   listPlans,
   createPlan,
   togglePlanStatus,
@@ -45,7 +41,6 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function PlanTab({ refreshSignal }: PlanTabProps) {
-  const insets = useSafeAreaInsets();
   const { colors, scaleFont, triggerHaptic } = useHCITheme();
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
@@ -53,7 +48,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Mode Selection: Task vs 7-Day Schedule
+  // Mode Selection: Task vs Schedule
   const [planTypeMode, setPlanTypeMode] = useState<PlanTypeMode>('task');
 
   // Task Form inputs
@@ -64,13 +59,13 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
   const [priorityInput, setPriorityInput] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [categoryInput, setCategoryInput] = useState('task');
 
-  // Schedule Form inputs (1-7 Days, Weekly Repeat, Day Time-Blocks)
+  // Schedule Form inputs
   const [daysDuration, setDaysDuration] = useState<number>(7);
   const [repeatWeekly, setRepeatWeekly] = useState<boolean>(true);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
   const [daySchedules, setDaySchedules] = useState<DaySchedule[]>([]);
 
-  // New Block inputs for the selected day
+  // New Block inputs
   const [newBlockTime, setNewBlockTime] = useState('08:00 AM');
   const [newBlockActivity, setNewBlockActivity] = useState('');
 
@@ -93,7 +88,6 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
     return plans;
   }, [plans, filter]);
 
-  // Initialize fresh 7-day schedule template
   const initDefaultSchedules = (numDays: number): DaySchedule[] => {
     return Array.from({ length: numDays }, (_, i) => ({
       dayName: DAYS_OF_WEEK[i % 7],
@@ -216,10 +210,10 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
       const scheduleJson = planTypeMode === 'schedule' ? JSON.stringify(daySchedules) : null;
       if (editingId) {
         await updatePlan(editingId, {
-          title: titleInput,
-          description: descInput,
-          due_date: planTypeMode === 'task' ? dueDateInput : undefined,
-          due_time: planTypeMode === 'task' ? dueTimeInput : undefined,
+          title: titleInput.trim(),
+          description: descInput.trim(),
+          due_date: planTypeMode === 'task' ? dueDateInput.trim() : undefined,
+          due_time: planTypeMode === 'task' ? dueTimeInput.trim() : undefined,
           priority: priorityInput,
           category: categoryInput,
           plan_type: planTypeMode,
@@ -229,10 +223,10 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
         });
       } else {
         await createPlan({
-          title: titleInput,
-          description: descInput,
-          due_date: planTypeMode === 'task' ? dueDateInput : undefined,
-          due_time: planTypeMode === 'task' ? dueTimeInput : undefined,
+          title: titleInput.trim(),
+          description: descInput.trim(),
+          due_date: planTypeMode === 'task' ? dueDateInput.trim() : undefined,
+          due_time: planTypeMode === 'task' ? dueTimeInput.trim() : undefined,
           priority: priorityInput,
           category: categoryInput,
           plan_type: planTypeMode,
@@ -282,8 +276,15 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
       case 'high':
         return '#f97316';
       default:
-        return '#38bdf8';
+        return '#0284c7';
     }
+  };
+
+  const setRelativeDueDate = (daysOffset: number) => {
+    triggerHaptic('selection');
+    const d = new Date();
+    d.setDate(d.getDate() + daysOffset);
+    setDueDateInput(d.toISOString().split('T')[0]);
   };
 
   return (
@@ -308,13 +309,14 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                   setFilter(tab);
                 }}
                 activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <Text
                   style={[
                     styles.filterText,
                     {
                       color: isSelected ? '#ffffff' : colors.textSecondary,
-                      fontSize: scaleFont(11),
+                      fontSize: scaleFont(12),
                     },
                   ]}
                 >
@@ -329,16 +331,17 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
           style={[styles.addBtn, { backgroundColor: colors.primary }]}
           onPress={handleOpenCreate}
           activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 4 }} />
-          <Text style={[styles.addBtnText, { fontSize: scaleFont(12) }]}>Create Plan</Text>
+          <Ionicons name="add" size={18} color="#ffffff" style={{ marginRight: 4 }} />
+          <Text style={[styles.addBtnText, { fontSize: scaleFont(12.5) }]}>New Plan</Text>
         </TouchableOpacity>
       </View>
 
       {/* 2. Plans List */}
       <ScrollView
         style={styles.scrollList}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
       >
         {filteredPlans.length === 0 ? (
           <EmptyState
@@ -368,23 +371,29 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                   {
                     backgroundColor: colors.surface,
                     borderColor: isCompleted ? colors.border : `${pColor}40`,
-                    opacity: isCompleted ? 0.6 : 1,
+                    opacity: isCompleted ? 0.65 : 1,
                   },
                 ]}
               >
-                {/* Status Toggle Checkbox */}
+                {/* Status Toggle Checkbox (44dp touch target) */}
                 <TouchableOpacity
-                  style={[
-                    styles.checkbox,
-                    {
-                      borderColor: isCompleted ? '#10b981' : colors.border,
-                      backgroundColor: isCompleted ? '#10b981' : 'transparent',
-                    },
-                  ]}
+                  style={styles.checkboxTouchTarget}
                   onPress={() => handleToggleStatus(plan)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Toggle plan completion status"
                 >
-                  {isCompleted && <Ionicons name="checkmark" size={16} color="#ffffff" />}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        borderColor: isCompleted ? '#10b981' : colors.border,
+                        backgroundColor: isCompleted ? '#10b981' : 'transparent',
+                      },
+                    ]}
+                  >
+                    {isCompleted && <Ionicons name="checkmark" size={16} color="#ffffff" />}
+                  </View>
                 </TouchableOpacity>
 
                 {/* Plan Content */}
@@ -409,7 +418,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                     </Text>
 
                     <View style={[styles.priorityBadge, { backgroundColor: `${pColor}20` }]}>
-                      <Text style={[styles.priorityText, { color: pColor, fontSize: scaleFont(9) }]}>
+                      <Text style={[styles.priorityText, { color: pColor, fontSize: scaleFont(9.5) }]}>
                         {isSchedule ? 'ROUTINE' : plan.priority.toUpperCase()}
                       </Text>
                     </View>
@@ -417,7 +426,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
 
                   {plan.description ? (
                     <Text
-                      style={[styles.planDesc, { color: colors.textSecondary, fontSize: scaleFont(11) }]}
+                      style={[styles.planDesc, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}
                       numberOfLines={2}
                     >
                       {plan.description}
@@ -428,17 +437,17 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                   <View style={styles.planMetaRow}>
                     {isSchedule ? (
                       <View style={styles.metaItem}>
-                        <Ionicons name="repeat-outline" size={12} color="#10b981" style={{ marginRight: 4 }} />
-                        <Text style={[styles.metaText, { color: '#10b981', fontSize: scaleFont(10) }]}>
-                          {plan.days_duration || 7} Days {plan.repeat_weekly ? '• Weekly Repeat' : ''} ({scheduleBlocksCount} blocks)
+                        <Ionicons name="repeat-outline" size={13} color="#10b981" style={{ marginRight: 4 }} />
+                        <Text style={[styles.metaText, { color: '#10b981', fontSize: scaleFont(10.5) }]}>
+                          {plan.days_duration || 7} Days {plan.repeat_weekly ? '• Weekly' : ''} ({scheduleBlocksCount} blocks)
                         </Text>
                       </View>
                     ) : (
                       <>
                         {plan.due_date && (
                           <View style={styles.metaItem}>
-                            <Ionicons name="calendar-outline" size={12} color={colors.textMuted} style={{ marginRight: 4 }} />
-                            <Text style={[styles.metaText, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
+                            <Ionicons name="calendar-outline" size={13} color={colors.textMuted} style={{ marginRight: 4 }} />
+                            <Text style={[styles.metaText, { color: colors.textMuted, fontSize: scaleFont(10.5) }]}>
                               {plan.due_date} {plan.due_time || ''}
                             </Text>
                           </View>
@@ -447,20 +456,22 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                     )}
 
                     <View style={[styles.categoryTag, { backgroundColor: colors.background }]}>
-                      <Text style={[styles.categoryTagText, { color: colors.textMuted, fontSize: scaleFont(9) }]}>
+                      <Text style={[styles.categoryTagText, { color: colors.textMuted, fontSize: scaleFont(9.5) }]}>
                         {(isSchedule ? 'Schedule' : plan.category).toUpperCase()}
                       </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
 
-                {/* Delete Button */}
+                {/* Delete Button (44dp touch target) */}
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => handleDelete(plan.id)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityLabel="Delete plan"
                 >
-                  <Feather name="trash-2" size={15} color={colors.textMuted} />
+                  <Feather name="trash-2" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
             );
@@ -468,424 +479,458 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
         )}
       </ScrollView>
 
-      {/* 3. Create / Edit Plan Modal Sheet with Robust HCI Bottom Insets */}
-      <Modal
+      {/* 3. Create / Edit Plan Modal Sheet using Standard ModalSheet */}
+      <ModalSheet
         visible={modalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onClose={() => setModalVisible(false)}
+        title={editingId ? 'Edit Plan' : 'Create New Plan'}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View
-            style={[
-              styles.modalSheet,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                paddingBottom: Math.max(insets.bottom, 24) + 16,
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text, fontSize: scaleFont(16) }]}>
-                {editingId ? 'Edit Plan' : 'Create New Plan'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Ionicons name="close" size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Mode Switcher: Single Task vs Multi-Day Schedule */}
-            <View style={[styles.modeSelectorWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <TouchableOpacity
-                style={[
-                  styles.modeOptionBtn,
-                  planTypeMode === 'task' && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => {
-                  triggerHaptic('selection');
-                  setPlanTypeMode('task');
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="checkbox-outline"
-                  size={14}
-                  color={planTypeMode === 'task' ? '#ffffff' : colors.textSecondary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.modeOptionText,
-                    {
-                      color: planTypeMode === 'task' ? '#ffffff' : colors.textSecondary,
-                      fontSize: scaleFont(12),
-                    },
-                  ]}
-                >
-                  Single Task
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.modeOptionBtn,
-                  planTypeMode === 'schedule' && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => {
-                  triggerHaptic('selection');
-                  setPlanTypeMode('schedule');
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={14}
-                  color={planTypeMode === 'schedule' ? '#ffffff' : colors.textSecondary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.modeOptionText,
-                    {
-                      color: planTypeMode === 'schedule' ? '#ffffff' : colors.textSecondary,
-                      fontSize: scaleFont(12),
-                    },
-                  ]}
-                >
-                  Schedule / Routine
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={{ gap: 14 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+        <View style={{ gap: 14 }}>
+          {/* Mode Switcher: Single Task vs Multi-Day Routine (48dp height buttons) */}
+          <View style={[styles.modeSelectorWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={[
+                styles.modeOptionBtn,
+                planTypeMode === 'task' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setPlanTypeMode('task');
+              }}
+              activeOpacity={0.8}
             >
-              {/* Title Input */}
-              <View>
-                <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                  {planTypeMode === 'schedule' ? 'ROUTINE / SCHEDULE NAME' : 'TASK TITLE'}
-                </Text>
-                <TextInput
-                  style={[styles.inputBox, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                  placeholder={planTypeMode === 'schedule' ? 'e.g. Master Weekly Routine' : 'e.g. Executive Budget Review'}
-                  placeholderTextColor={colors.textMuted}
-                  value={titleInput}
-                  onChangeText={setTitleInput}
-                />
+              <Ionicons
+                name="checkbox-outline"
+                size={16}
+                color={planTypeMode === 'task' ? '#ffffff' : colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.modeOptionText,
+                  {
+                    color: planTypeMode === 'task' ? '#ffffff' : colors.textSecondary,
+                    fontSize: scaleFont(12.5),
+                  },
+                ]}
+              >
+                Single Task
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modeOptionBtn,
+                planTypeMode === 'schedule' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setPlanTypeMode('schedule');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={planTypeMode === 'schedule' ? '#ffffff' : colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.modeOptionText,
+                  {
+                    color: planTypeMode === 'schedule' ? '#ffffff' : colors.textSecondary,
+                    fontSize: scaleFont(12.5),
+                  },
+                ]}
+              >
+                Schedule / Routine
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Title Input (48dp height) */}
+          <View>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+              {planTypeMode === 'schedule' ? 'ROUTINE / SCHEDULE NAME' : 'TASK TITLE'}
+            </Text>
+            <TextInput
+              style={[
+                styles.hciInputBox,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.border,
+                  fontSize: scaleFont(13),
+                },
+              ]}
+              placeholder={planTypeMode === 'schedule' ? 'e.g. Master Weekly Routine' : 'e.g. Executive Budget Review'}
+              placeholderTextColor={colors.textMuted}
+              value={titleInput}
+              onChangeText={setTitleInput}
+            />
+          </View>
+
+          {/* Description Input */}
+          <View>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+              NOTES / CONTEXT
+            </Text>
+            <TextInput
+              style={[
+                styles.hciInputBox,
+                styles.multilineBox,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.border,
+                  fontSize: scaleFont(13),
+                },
+              ]}
+              placeholder="Details, purpose, or instructions..."
+              placeholderTextColor={colors.textMuted}
+              value={descInput}
+              onChangeText={setDescInput}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+
+          {/* Mode 1: Single Task Fields */}
+          {planTypeMode === 'task' ? (
+            <>
+              {/* Due Date & Time */}
+              <View style={styles.rowTwoInputs}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                    DUE DATE (YYYY-MM-DD)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.hciInputBox,
+                      {
+                        backgroundColor: colors.background,
+                        color: colors.text,
+                        borderColor: colors.border,
+                        fontSize: scaleFont(13),
+                      },
+                    ]}
+                    placeholder="2026-10-08"
+                    placeholderTextColor={colors.textMuted}
+                    value={dueDateInput}
+                    onChangeText={setDueDateInput}
+                  />
+                </View>
+                <View style={{ width: 120 }}>
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                    TIME
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.hciInputBox,
+                      {
+                        backgroundColor: colors.background,
+                        color: colors.text,
+                        borderColor: colors.border,
+                        fontSize: scaleFont(13),
+                      },
+                    ]}
+                    placeholder="14:00"
+                    placeholderTextColor={colors.textMuted}
+                    value={dueTimeInput}
+                    onChangeText={setDueTimeInput}
+                  />
+                </View>
               </View>
 
-              {/* Description Input */}
-              <View>
-                <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                  NOTES / CONTEXT
-                </Text>
-                <TextInput
-                  style={[
-                    styles.inputBox,
-                    styles.multilineBox,
-                    { backgroundColor: colors.background, color: colors.text, borderColor: colors.border },
-                  ]}
-                  placeholder="Details, purpose, or instructions..."
-                  placeholderTextColor={colors.textMuted}
-                  value={descInput}
-                  onChangeText={setDescInput}
-                  multiline
-                  numberOfLines={2}
-                />
+              {/* Quick Date Helper Chips */}
+              <View style={styles.quickDateRow}>
+                <TouchableOpacity
+                  style={[styles.quickDateChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => setRelativeDueDate(0)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={[styles.quickDateText, { color: colors.primary, fontSize: scaleFont(11) }]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.quickDateChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => setRelativeDueDate(1)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={[styles.quickDateText, { color: colors.primary, fontSize: scaleFont(11) }]}>Tomorrow</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.quickDateChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => setRelativeDueDate(7)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={[styles.quickDateText, { color: colors.primary, fontSize: scaleFont(11) }]}>+7 Days</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Mode 1: Single Task Fields */}
-              {planTypeMode === 'task' ? (
-                <>
-                  <View style={styles.rowTwoInputs}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                        DUE DATE (YYYY-MM-DD)
-                      </Text>
-                      <TextInput
-                        style={[styles.inputBox, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                        placeholder="2026-10-08"
-                        placeholderTextColor={colors.textMuted}
-                        value={dueDateInput}
-                        onChangeText={setDueDateInput}
-                      />
-                    </View>
-                    <View style={{ width: 110 }}>
-                      <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                        TIME
-                      </Text>
-                      <TextInput
-                        style={[styles.inputBox, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                        placeholder="14:00"
-                        placeholderTextColor={colors.textMuted}
-                        value={dueTimeInput}
-                        onChangeText={setDueTimeInput}
-                      />
-                    </View>
-                  </View>
-
-                  {/* Priority Chips */}
-                  <View>
-                    <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                      PRIORITY
-                    </Text>
-                    <View style={styles.chipSelectRow}>
-                      {(['normal', 'high', 'urgent'] as const).map((p) => {
-                        const isSelected = priorityInput === p;
-                        const pColor = getPriorityColor(p);
-                        return (
-                          <TouchableOpacity
-                            key={p}
-                            style={[
-                              styles.selectChip,
-                              {
-                                backgroundColor: isSelected ? `${pColor}20` : colors.background,
-                                borderColor: isSelected ? pColor : colors.border,
-                              },
-                            ]}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              setPriorityInput(p);
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[styles.selectChipText, { color: isSelected ? pColor : colors.textSecondary, fontSize: scaleFont(11) }]}>
-                              {p.toUpperCase()}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {/* Category Chips */}
-                  <View>
-                    <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                      CATEGORY
-                    </Text>
-                    <View style={styles.chipSelectRow}>
-                      {(['task', 'meeting', 'reminder'] as const).map((cat) => {
-                        const isSelected = categoryInput === cat;
-                        return (
-                          <TouchableOpacity
-                            key={cat}
-                            style={[
-                              styles.selectChip,
-                              {
-                                backgroundColor: isSelected ? `${colors.primary}20` : colors.background,
-                                borderColor: isSelected ? colors.primary : colors.border,
-                              },
-                            ]}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              setCategoryInput(cat);
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[styles.selectChipText, { color: isSelected ? colors.primary : colors.textSecondary, fontSize: scaleFont(11) }]}>
-                              {cat.toUpperCase()}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </>
-              ) : (
-                /* Mode 2: Multi-Day Schedule (Capped at 7 Days) */
-                <View style={styles.scheduleSection}>
-                  {/* Duration Selector (1 - 7 Days) */}
-                  <View>
-                    <View style={styles.durationHeaderRow}>
-                      <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11), marginBottom: 0 }]}>
-                        SCHEDULE DURATION (1 TO 7 DAYS)
-                      </Text>
-                      <Text style={[styles.durationValPill, { color: colors.primary, fontSize: scaleFont(11) }]}>
-                        {daysDuration} {daysDuration === 1 ? 'Day' : 'Days'}
-                      </Text>
-                    </View>
-                    <View style={styles.daysPillRow}>
-                      {[1, 2, 3, 4, 5, 6, 7].map((num) => {
-                        const isSel = daysDuration === num;
-                        return (
-                          <TouchableOpacity
-                            key={num}
-                            style={[
-                              styles.dayNumBtn,
-                              {
-                                backgroundColor: isSel ? colors.primary : colors.background,
-                                borderColor: isSel ? colors.primary : colors.border,
-                              },
-                            ]}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              handleDurationChange(num);
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Text
-                              style={[
-                                styles.dayNumText,
-                                {
-                                  color: isSel ? '#ffffff' : colors.textSecondary,
-                                  fontSize: scaleFont(11),
-                                },
-                              ]}
-                            >
-                              {num}d
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {/* Repeat Weekly Toggle */}
-                  <View style={[styles.repeatToggleRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.repeatTitle, { color: colors.text, fontSize: scaleFont(12) }]}>
-                        Repeat Weekly (Year-Round)
-                      </Text>
-                      <Text style={[styles.repeatDesc, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
-                        Cycle through this routine every week automatically
-                      </Text>
-                    </View>
-                    <Switch
-                      value={repeatWeekly}
-                      onValueChange={(val) => {
-                        triggerHaptic('selection');
-                        setRepeatWeekly(val);
-                      }}
-                      thumbColor="#ffffff"
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                    />
-                  </View>
-
-                  {/* Day Picker Pills (Mon-Sun) */}
-                  <View>
-                    <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                      CONFIGURE DAY TIMELINE
-                    </Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                      {daySchedules.map((day, idx) => {
-                        const isSelected = selectedDayIndex === idx;
-                        return (
-                          <TouchableOpacity
-                            key={day.dayName + idx}
-                            style={[
-                              styles.dayTabPill,
-                              {
-                                backgroundColor: isSelected ? `${colors.primary}25` : colors.background,
-                                borderColor: isSelected ? colors.primary : colors.border,
-                              },
-                            ]}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              setSelectedDayIndex(idx);
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Text
-                              style={[
-                                styles.dayTabPillText,
-                                {
-                                  color: isSelected ? colors.primary : colors.textSecondary,
-                                  fontSize: scaleFont(11),
-                                  fontWeight: isSelected ? '800' : '600',
-                                },
-                              ]}
-                            >
-                              {day.dayName.slice(0, 3)} ({day.blocks?.length || 0})
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-
-                  {/* Selected Day Time Blocks Timeline */}
-                  <View style={[styles.dayTimelineCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <Text style={[styles.timelineHeader, { color: colors.text, fontSize: scaleFont(12) }]}>
-                      {daySchedules[selectedDayIndex]?.dayName || 'Day'} Routine Blocks
-                    </Text>
-
-                    {daySchedules[selectedDayIndex]?.blocks.length === 0 ? (
-                      <Text style={[styles.noBlocksText, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
-                        No activities defined for this day. Add time blocks below.
-                      </Text>
-                    ) : (
-                      daySchedules[selectedDayIndex]?.blocks.map((b) => (
-                        <View key={b.id} style={[styles.blockItemRow, { borderColor: colors.border }]}>
-                          <View style={[styles.timeBadge, { backgroundColor: `${colors.primary}18` }]}>
-                            <Text style={[styles.timeBadgeText, { color: colors.primary, fontSize: scaleFont(10) }]}>
-                              {b.time}
-                            </Text>
-                          </View>
-                          <Text style={[styles.blockActivityText, { color: colors.text, fontSize: scaleFont(12) }]} numberOfLines={1}>
-                            {b.activity}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => handleRemoveBlock(selectedDayIndex, b.id)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Feather name="x" size={14} color={colors.textMuted} />
-                          </TouchableOpacity>
-                        </View>
-                      ))
-                    )}
-
-                    {/* Quick Add Block Row */}
-                    <View style={styles.addBlockRow}>
-                      <TextInput
-                        style={[styles.inputBox, styles.timeInputBox, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                        placeholder="08:00 AM"
-                        placeholderTextColor={colors.textMuted}
-                        value={newBlockTime}
-                        onChangeText={setNewBlockTime}
-                      />
-                      <TextInput
-                        style={[styles.inputBox, { flex: 1, backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                        placeholder="Activity (e.g. Focus Sprint)"
-                        placeholderTextColor={colors.textMuted}
-                        value={newBlockActivity}
-                        onChangeText={setNewBlockActivity}
-                      />
+              {/* Priority Chips (44dp touch target) */}
+              <View>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                  PRIORITY
+                </Text>
+                <View style={styles.chipSelectRow}>
+                  {(['normal', 'high', 'urgent'] as const).map((p) => {
+                    const isSelected = priorityInput === p;
+                    const pColor = getPriorityColor(p);
+                    return (
                       <TouchableOpacity
-                        style={[styles.addBlockBtn, { backgroundColor: colors.primary }]}
-                        onPress={handleAddBlockToCurrentDay}
-                        activeOpacity={0.8}
+                        key={p}
+                        style={[
+                          styles.selectChip,
+                          {
+                            backgroundColor: isSelected ? `${pColor}20` : colors.background,
+                            borderColor: isSelected ? pColor : colors.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          triggerHaptic('selection');
+                          setPriorityInput(p);
+                        }}
+                        activeOpacity={0.7}
                       >
-                        <Ionicons name="add" size={16} color="#ffffff" />
+                        <Text style={[styles.selectChipText, { color: isSelected ? pColor : colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                          {p.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Category Chips (44dp touch target) */}
+              <View>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                  CATEGORY
+                </Text>
+                <View style={styles.chipSelectRow}>
+                  {(['task', 'meeting', 'reminder'] as const).map((cat) => {
+                    const isSelected = categoryInput === cat;
+                    return (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[
+                          styles.selectChip,
+                          {
+                            backgroundColor: isSelected ? `${colors.primary}20` : colors.background,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          triggerHaptic('selection');
+                          setCategoryInput(cat);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.selectChipText, { color: isSelected ? colors.primary : colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                          {cat.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </>
+          ) : (
+            /* Mode 2: Multi-Day Schedule */
+            <View style={styles.scheduleSection}>
+              {/* Duration Selector */}
+              <View>
+                <View style={styles.durationHeaderRow}>
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5), marginBottom: 0 }]}>
+                    SCHEDULE DURATION
+                  </Text>
+                  <Text style={[styles.durationValPill, { color: colors.primary, fontSize: scaleFont(12) }]}>
+                    {daysDuration} {daysDuration === 1 ? 'Day' : 'Days'}
+                  </Text>
+                </View>
+                <View style={styles.daysPillRow}>
+                  {[1, 2, 3, 4, 5, 6, 7].map((num) => {
+                    const isSel = daysDuration === num;
+                    return (
+                      <TouchableOpacity
+                        key={num}
+                        style={[
+                          styles.dayNumBtn,
+                          {
+                            backgroundColor: isSel ? colors.primary : colors.background,
+                            borderColor: isSel ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          triggerHaptic('selection');
+                          handleDurationChange(num);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.dayNumText,
+                            {
+                              color: isSel ? '#ffffff' : colors.textSecondary,
+                              fontSize: scaleFont(12),
+                            },
+                          ]}
+                        >
+                          {num}d
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Repeat Weekly Toggle */}
+              <View style={[styles.repeatToggleRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.repeatTitle, { color: colors.text, fontSize: scaleFont(12.5) }]}>
+                    Repeat Weekly (Year-Round)
+                  </Text>
+                  <Text style={[styles.repeatDesc, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
+                    Cycle through this routine every week automatically
+                  </Text>
+                </View>
+                <Switch
+                  value={repeatWeekly}
+                  onValueChange={(val) => {
+                    triggerHaptic('selection');
+                    setRepeatWeekly(val);
+                  }}
+                  thumbColor="#ffffff"
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                />
+              </View>
+
+              {/* Day Picker Pills (Mon-Sun) */}
+              <View>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
+                  CONFIGURE DAY TIMELINE
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  {daySchedules.map((day, idx) => {
+                    const isSelected = selectedDayIndex === idx;
+                    return (
+                      <TouchableOpacity
+                        key={day.dayName + idx}
+                        style={[
+                          styles.dayTabPill,
+                          {
+                            backgroundColor: isSelected ? `${colors.primary}25` : colors.background,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          triggerHaptic('selection');
+                          setSelectedDayIndex(idx);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.dayTabPillText,
+                            {
+                              color: isSelected ? colors.primary : colors.textSecondary,
+                              fontSize: scaleFont(11.5),
+                              fontWeight: isSelected ? '800' : '600',
+                            },
+                          ]}
+                        >
+                          {day.dayName.slice(0, 3)} ({day.blocks?.length || 0})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Selected Day Time Blocks Timeline */}
+              <View style={[styles.dayTimelineCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={[styles.timelineHeader, { color: colors.text, fontSize: scaleFont(12.5) }]}>
+                  {daySchedules[selectedDayIndex]?.dayName || 'Day'} Routine Blocks
+                </Text>
+
+                {daySchedules[selectedDayIndex]?.blocks.length === 0 ? (
+                  <Text style={[styles.noBlocksText, { color: colors.textMuted, fontSize: scaleFont(11.5) }]}>
+                    No activities defined for this day. Add time blocks below.
+                  </Text>
+                ) : (
+                  daySchedules[selectedDayIndex]?.blocks.map((b) => (
+                    <View key={b.id} style={[styles.blockItemRow, { borderColor: colors.border }]}>
+                      <View style={[styles.timeBadge, { backgroundColor: `${colors.primary}18` }]}>
+                        <Text style={[styles.timeBadgeText, { color: colors.primary, fontSize: scaleFont(10.5) }]}>
+                          {b.time}
+                        </Text>
+                      </View>
+                      <Text style={[styles.blockActivityText, { color: colors.text, fontSize: scaleFont(12.5) }]} numberOfLines={1}>
+                        {b.activity}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveBlock(selectedDayIndex, b.id)}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        style={styles.blockDeleteBtn}
+                      >
+                        <Feather name="x" size={16} color={colors.textMuted} />
                       </TouchableOpacity>
                     </View>
-                  </View>
-                </View>
-              )}
+                  ))
+                )}
 
-              {/* Save CTA */}
-              <TouchableOpacity
-                style={[styles.saveBtn, { backgroundColor: colors.primary, marginTop: 12 }]}
-                onPress={handleSave}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.saveBtnText, { fontSize: scaleFont(13) }]}>
-                  {editingId ? 'Update Plan' : planTypeMode === 'schedule' ? 'Save Schedule' : 'Save Plan'}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+                {/* Quick Add Block Row (48dp height controls) */}
+                <View style={styles.addBlockRow}>
+                  <TextInput
+                    style={[
+                      styles.hciInputBox,
+                      styles.timeInputBox,
+                      { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, fontSize: scaleFont(12) },
+                    ]}
+                    placeholder="08:00 AM"
+                    placeholderTextColor={colors.textMuted}
+                    value={newBlockTime}
+                    onChangeText={setNewBlockTime}
+                  />
+                  <TextInput
+                    style={[
+                      styles.hciInputBox,
+                      { flex: 1, backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, fontSize: scaleFont(12.5) },
+                    ]}
+                    placeholder="Activity (e.g. Focus Sprint)"
+                    placeholderTextColor={colors.textMuted}
+                    value={newBlockActivity}
+                    onChangeText={setNewBlockActivity}
+                  />
+                  <TouchableOpacity
+                    style={[styles.addBlockBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleAddBlockToCurrentDay}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Add activity block"
+                  >
+                    <Ionicons name="add" size={20} color="#ffffff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Primary Save Action Button (52dp height) */}
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.primary, marginTop: 10 }]}
+            onPress={handleSave}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="checkmark-circle-outline" size={20} color="#ffffff" style={{ marginRight: 6 }} />
+            <Text style={[styles.saveBtnText, { fontSize: scaleFont(14) }]}>
+              {editingId ? 'Update Plan' : planTypeMode === 'schedule' ? 'Save Schedule' : 'Save Plan'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ModalSheet>
     </View>
   );
 }
@@ -904,11 +949,11 @@ const styles = StyleSheet.create({
   },
   filterGroup: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -918,8 +963,8 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 14,
   },
   addBtnText: {
@@ -933,22 +978,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  checkboxTouchTarget: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
   },
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   planBody: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 6,
   },
   planTitleRow: {
     flexDirection: 'row',
@@ -962,9 +1013,9 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   priorityBadge: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   priorityText: {
     fontWeight: '800',
@@ -986,74 +1037,69 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   categoryTag: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   categoryTagText: {
     fontWeight: '700',
   },
   deleteBtn: {
-    padding: 6,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    padding: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  modalTitle: {
-    fontWeight: '800',
+    justifyContent: 'center',
   },
   modeSelectorWrap: {
     flexDirection: 'row',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 3,
-    marginBottom: 14,
+    padding: 4,
   },
   modeOptionBtn: {
     flex: 1,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 11,
   },
   modeOptionText: {
     fontWeight: '700',
   },
   inputLabel: {
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontWeight: '700',
     marginBottom: 6,
+    letterSpacing: 0.3,
   },
-  inputBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
+  hciInputBox: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
   },
   multilineBox: {
-    height: 60,
+    height: 76,
+    paddingVertical: 10,
     textAlignVertical: 'top',
   },
   rowTwoInputs: {
     flexDirection: 'row',
     gap: 10,
+  },
+  quickDateRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: -4,
+  },
+  quickDateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  quickDateText: {
+    fontWeight: '700',
   },
   chipSelectRow: {
     flexDirection: 'row',
@@ -1061,10 +1107,11 @@ const styles = StyleSheet.create({
   },
   selectChip: {
     flex: 1,
+    height: 44,
     alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   selectChipText: {
     fontWeight: '800',
@@ -1087,10 +1134,11 @@ const styles = StyleSheet.create({
   },
   dayNumBtn: {
     flex: 1,
+    height: 42,
     alignItems: 'center',
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
   },
   dayNumText: {
     fontWeight: '800',
@@ -1099,48 +1147,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
   },
   repeatTitle: {
     fontWeight: '700',
   },
   repeatDesc: {
     marginTop: 2,
+    lineHeight: 14,
   },
   dayTabPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   dayTabPillText: {
     letterSpacing: 0.2,
   },
   dayTimelineCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
   },
   timelineHeader: {
     fontWeight: '800',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   noBlocksText: {
-    marginBottom: 10,
+    marginBottom: 12,
+    lineHeight: 16,
   },
   blockItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    paddingVertical: 8,
-    gap: 8,
+    paddingVertical: 10,
+    gap: 10,
   },
   timeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   timeBadgeText: {
     fontWeight: '800',
@@ -1149,28 +1199,35 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '600',
   },
+  blockDeleteBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addBlockRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
+    gap: 8,
+    marginTop: 12,
   },
   timeInputBox: {
-    width: 85,
-    paddingHorizontal: 6,
+    width: 95,
     textAlign: 'center',
   },
   addBlockBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveBtn: {
+    height: 52,
+    borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 14,
+    justifyContent: 'center',
   },
   saveBtnText: {
     color: '#ffffff',

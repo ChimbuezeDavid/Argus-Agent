@@ -542,10 +542,25 @@ export async function executeTool(name: string, args: any): Promise<any> {
       }
 
       case 'play_video_media': {
-        const mediaUri = args.file_path_or_url;
+        const mediaUri = args.file_path_or_url || args.uri || args.path || '';
         try {
-          if (mediaUri.startsWith('http')) {
+          if (!mediaUri) {
+            return {
+              success: false,
+              action: 'play_video_media',
+              message: 'No file path or URL provided for playback.',
+            };
+          }
+
+          if (mediaUri.startsWith('http://') || mediaUri.startsWith('https://')) {
             await Linking.openURL(mediaUri);
+          } else if (Platform.OS === 'android' && ArgusSystemMonitors?.openMediaFile) {
+            const targetPlayer = args.target_player || (mediaUri.toLowerCase().includes('vlc') || (args.title && args.title.toLowerCase().includes('vlc')) ? 'org.videolan.vlc' : undefined);
+            const opened = await ArgusSystemMonitors.openMediaFile(mediaUri, undefined, targetPlayer);
+            if (!opened) {
+              // Try fallback direct intent
+              await Linking.openURL(mediaUri.startsWith('file://') ? mediaUri : `file://${mediaUri}`);
+            }
           } else {
             await Linking.openURL(mediaUri.startsWith('file://') ? mediaUri : `file://${mediaUri}`);
           }
@@ -553,7 +568,7 @@ export async function executeTool(name: string, args: any): Promise<any> {
             success: true,
             action: 'play_video_media',
             uri: mediaUri,
-            message: `Starting media playback for ${args.title || mediaUri}.`,
+            message: `Playing ${args.title || mediaUri.split('/').pop() || 'media'} in media player.`,
           };
         } catch (err: any) {
           return {

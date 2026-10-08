@@ -494,7 +494,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         // 1. Notify static callback if React Native is attached
         onWakeWordCallback?.invoke(command)
 
-        // 2. Launch or bring MainActivity to the foreground
+        // 2. Launch or bring MainActivity to the foreground via direct intent & fullScreenIntent fallback
         try {
             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -502,7 +502,48 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                 putExtra("from_voice_daemon", true)
             }
             if (launchIntent != null) {
-                startActivity(launchIntent)
+                // Try direct launch
+                try {
+                    startActivity(launchIntent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Direct background startActivity blocked: ${e.message}")
+                }
+
+                // Android 10+ background launch bypass: dispatch fullScreenIntent notification
+                val fullScreenPendingIntent = PendingIntent.getActivity(
+                    this,
+                    9003,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+
+                val wakeChannelId = "argus_wake_alert_channel"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val wakeChannel = NotificationChannel(
+                        wakeChannelId,
+                        "Argus Wake Triggers",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Immediate heads-up alert when hands-free wake word is spoken"
+                        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    }
+                    val manager = getSystemService(NotificationManager::class.java)
+                    manager?.createNotificationChannel(wakeChannel)
+                }
+
+                val wakeNotification = NotificationCompat.Builder(this, wakeChannelId)
+                    .setSmallIcon(applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.ic_btn_speak_now)
+                    .setContentTitle("Argus Awakened ($customWakeWord)")
+                    .setContentText(if (command.isNotBlank()) "Command: \"$command\"" else "Listening for your voice instruction...")
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM)
+                    .setAutoCancel(true)
+                    .setContentIntent(fullScreenPendingIntent)
+                    .setFullScreenIntent(fullScreenPendingIntent, true)
+                    .build()
+
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.notify(9003, wakeNotification)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch activity from background daemon: ${e.message}")

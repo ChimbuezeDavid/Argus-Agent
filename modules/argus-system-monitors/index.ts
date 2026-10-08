@@ -41,6 +41,7 @@ export interface ArgusSystemMonitorsType {
   getAppUsageStats(startTimeMs: number, endTimeMs: number): Promise<AppUsageStats[]>;
   hasNotificationListenerPermission(): Promise<boolean>;
   launchApp(packageName: string): Promise<boolean>;
+  openMediaFile(filePath: string, mimeType?: string, targetPackage?: string): Promise<boolean>;
   openNotificationListenerSettings(): Promise<boolean>;
   openAppNotificationSettings(): Promise<boolean>;
   openUsageAccessSettings(): Promise<boolean>;
@@ -148,6 +149,15 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
     try {
       if (rawNativeModule && typeof rawNativeModule.launchApp === 'function') {
         return await rawNativeModule.launchApp(packageName);
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  openMediaFile: async (filePath: string, mimeType?: string, targetPackage?: string) => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.openMediaFile === 'function') {
+        return await rawNativeModule.openMediaFile(filePath, mimeType || null, targetPackage || null);
       }
     } catch (e) {}
     return false;

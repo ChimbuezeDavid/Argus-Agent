@@ -6,27 +6,31 @@ import { useHCITheme } from '@/hooks/useHCITheme';
 
 interface SectionCardProps {
   icon?: React.ReactNode | keyof typeof Ionicons.glyphMap | string;
+  iconBgColor?: string;
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   style?: ViewStyle;
 }
 
-export function SectionCard({ icon, title, subtitle, children, style }: SectionCardProps) {
+export function SectionCard({ icon, iconBgColor, title, subtitle, children, style }: SectionCardProps) {
   const { colors, scaleFont } = useHCITheme();
 
   const renderIcon = () => {
     if (!icon) return null;
     if (React.isValidElement(icon)) {
+      const iconElementColor = (icon.props as any)?.color;
+      const computedBg = iconBgColor || (iconElementColor ? `${iconElementColor}18` : `${colors.primary}18`);
       return (
-        <View style={[styles.iconWrapper, { backgroundColor: `${colors.primary}18` }]}>
+        <View style={[styles.iconWrapper, { backgroundColor: computedBg }]}>
           {icon}
         </View>
       );
     }
     if (typeof icon === 'string') {
+      const computedBg = iconBgColor || `${colors.primary}18`;
       return (
-        <View style={[styles.iconWrapper, { backgroundColor: `${colors.primary}18` }]}>
+        <View style={[styles.iconWrapper, { backgroundColor: computedBg }]}>
           <Ionicons
             name={icon as any}
             size={scaleFont(18)}

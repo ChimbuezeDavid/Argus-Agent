@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as voiceService from '@/services/voice/voiceService';
 import { useHCITheme } from '@/hooks/useHCITheme';
+import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 
 interface VoiceAssistantModalProps {
   visible: boolean;
@@ -34,12 +35,17 @@ export function VoiceAssistantModal({
   const [liveTranscript, setLiveTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('Tap microphone to speak');
+  const [statusMessage, setStatusMessage] = useState('Listening... Speak now');
 
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechDetectedRef = useRef<boolean>(false);
+  const silenceStartTimeRef = useRef<number | null>(null);
+  const isExecutingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (visible) {
+      isExecutingRef.current = false;
       startRecording();
     } else {
       stopRecording();
@@ -54,6 +60,10 @@ export function VoiceAssistantModal({
     if (recordingTimeoutRef.current) {
       clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = null;
+    }
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
     }
   };
 
@@ -83,6 +93,9 @@ export function VoiceAssistantModal({
     setLiveTranscript('');
     setIsTranscribing(false);
     clearAllTimers();
+    speechDetectedRef.current = false;
+    silenceStartTimeRef.current = null;
+    isExecutingRef.current = false;
 
     const hasPermission = await requestMicPermission();
     if (!hasPermission) {
@@ -95,14 +108,42 @@ export function VoiceAssistantModal({
       const res = await voiceService.startHardwareAudioCapture();
       if (res.success) {
         setIsRecording(true);
-        setStatusMessage('🎙️ Recording voice... Speak clearly.');
+        setStatusMessage('🎙️ Listening... Speak naturally.');
 
-        // Auto-stop after 10s maximum recording window
+        // 1. Automated Voice Activity Detection (VAD) / Silence Detection Loop
+        const SPEECH_THRESHOLD = 1800; // speech amplitude threshold
+        const SILENCE_DURATION_MS = 1500; // 1.5s of silence after speech triggers auto-finish
+
+        vadIntervalRef.current = setInterval(async () => {
+          if (isExecutingRef.current) return;
+          try {
+            const amp = await ArgusSystemMonitors.getAudioCaptureAmplitude();
+            if (amp > SPEECH_THRESHOLD) {
+              speechDetectedRef.current = true;
+              silenceStartTimeRef.current = null;
+              setStatusMessage('🗣️ Hearing you speak...');
+            } else if (speechDetectedRef.current) {
+              const now = Date.now();
+              if (!silenceStartTimeRef.current) {
+                silenceStartTimeRef.current = now;
+              } else if (now - silenceStartTimeRef.current >= SILENCE_DURATION_MS) {
+                // User has finished speaking! Auto-submit without requiring manual tap
+                console.log('[VAD] End of speech silence detected. Auto-completing recording...');
+                isExecutingRef.current = true;
+                clearAllTimers();
+                handleFinishAndTranscribe();
+              }
+            }
+          } catch (e) {}
+        }, 180);
+
+        // 2. Safety fallback timeout (12s maximum recording window)
         recordingTimeoutRef.current = setTimeout(() => {
-          if (isRecording) {
+          if (!isExecutingRef.current) {
+            isExecutingRef.current = true;
             handleFinishAndTranscribe();
           }
-        }, 10000);
+        }, 12000);
       } else {
         setStatusMessage(res.error || 'Could not start microphone');
       }
@@ -120,10 +161,11 @@ export function VoiceAssistantModal({
 
   const handleFinishAndTranscribe = async () => {
     clearAllTimers();
+    isExecutingRef.current = true;
     triggerHaptic('selection');
     setIsRecording(false);
     setIsTranscribing(true);
-    setStatusMessage('🧠 Gemini is transcribing & understanding your instruction...');
+    setStatusMessage('🧠 Understanding your voice instruction...');
 
     try {
       const base64Audio = await voiceService.stopHardwareAudioCapture();

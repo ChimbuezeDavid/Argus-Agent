@@ -58,7 +58,7 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
     <View style={styles.container}>
       {/* 1. Background Wake Word Daemon */}
       <SectionCard
-        icon={<Ionicons name="mic" size={scaleFont(20)} color="#06b6d4" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="mic" size={scaleFont(20)} color="#06b6d4" />}
         title="Background Acoustic Sensing"
         subtitle="Continuous hands-free wake word detection powered by a dedicated low-power daemon service."
       >
@@ -111,7 +111,7 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
 
       {/* 2. Wake Trigger & Custom Hotword Selection */}
       <SectionCard
-        icon={<Ionicons name="radio" size={scaleFont(20)} color="#10b981" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="radio" size={scaleFont(20)} color="#10b981" />}
         title="Wake Word & Trigger Phrase"
         subtitle="Configure the acoustic keyphrase that instantly awakens Argus."
       >
@@ -241,7 +241,7 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
 
       {/* 3. Spoken Audio Feedback */}
       <SectionCard
-        icon={<Ionicons name="volume-high" size={scaleFont(20)} color="#f59e0b" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="volume-high" size={scaleFont(20)} color="#f59e0b" />}
         title="Spoken Audio Feedback"
         subtitle="Audible voice responses using native on-device speech synthesis."
       >

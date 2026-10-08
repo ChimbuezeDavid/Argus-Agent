@@ -286,7 +286,7 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
 
       {/* 2. Active Model Selection Cards */}
       <SectionCard
-        icon={<Ionicons name="sparkles" size={scaleFont(20)} color="#8b5cf6" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="sparkles" size={scaleFont(20)} color="#8b5cf6" />}
         title="Active Gemini Model"
         subtitle="Select the primary neural architecture for multimodal reasoning and on-device execution."
       >
@@ -344,7 +344,7 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
 
       {/* 3. Generation Temperature */}
       <SectionCard
-        icon={<Ionicons name="thermometer-outline" size={scaleFont(20)} color="#f59e0b" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="thermometer-outline" size={scaleFont(20)} color="#f59e0b" />}
         title="Generation Temperature"
         subtitle="Lower values produce deterministic, factual outputs. Higher values allow creative suggestions."
       >
@@ -361,7 +361,7 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
 
       {/* 4. Autonomous Agent Features */}
       <SectionCard
-        icon={<Ionicons name="bulb-outline" size={scaleFont(20)} color="#38bdf8" style={{ marginRight: 8 }} />}
+        icon={<Ionicons name="bulb-outline" size={scaleFont(20)} color="#38bdf8" />}
         title="Agent Behavior"
         subtitle="Tune proactive decision making and autonomous background analysis."
       >

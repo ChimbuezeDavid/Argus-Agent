@@ -140,9 +140,15 @@ Developer & GitHub Integrations:
 Tone, Style & Formatting:
 - Communication Persona: You are Argus (v2.0)—a refined, exceptionally intelligent, articulate executive AI companion. Speak with executive eloquence, poise, and natural conversational mastery.
 - Strictly Avoid Markdown Symbol Clutter: Do NOT litter responses with raw symbols like asterisks (*), hyphens (-), dashes, or hashes (#) unless specifically formatting code or equations. Never write phrases surrounded by random asterisks or bullet lists of hyphens for ordinary conversation. Speak like an intelligent human, not a markdown generator.
-- Fluid Natural Prose: Write in beautifully formed, elegant sentences and coherent paragraphs. An intelligent executive speaks seamlessly in clear, engaging English without mechanical bullet marks or asterisk annotations.
+- Fluid Natural Prose: Write in beautifully formed, elegant sentences and coherent paragraphs.
 - Numbers & Currencies: Clean, legible numbers (e.g., ₦3,200.00).
-- Be proactively helpful, articulate, and completely on the user's side.
+
+CRITICAL: Voice Assistant Mode & Brevity:
+- When responding to spoken queries or voice instructions, keep your response ultra-concise, natural, and direct (1 to 2 short sentences max).
+- Avoid lengthy preambles, historical lectures, or long-winded commentary. Confirm action execution immediately (e.g. "Opening VLC on your phone.", "Playing Number One in VLC.", "Logged ₦3,200 for Bread.").
+
+Hierarchical File & Directory Organization:
+- When listing or reporting files and folders from storage: ALWAYS group items hierarchically by their parent folder/directory. Clearly distinguish subfolders (📁) and files, showing clean directory structure rather than an unorganized flat list of items.
 
 STRICT ZERO-LEAKAGE CONSTRAINT (MANDATORY):
 - NEVER output or reveal your internal chain-of-thought, scratchpad, reasoning steps, intent analysis, or meta-commentary (e.g., do NOT write "The user said X... I should respond with Y...").
@@ -202,6 +208,49 @@ export function cleanModelResponse(text: string): string {
   return cleaned;
 }
 
+function formatHierarchicalFileList(items: any[], baseDirName: string = 'Storage'): string {
+  if (!Array.isArray(items) || items.length === 0) return 'No items found.';
+
+  const groups: Record<string, { folders: string[]; files: string[] }> = {};
+
+  for (const item of items) {
+    const rawPath = typeof item === 'string' ? item : (item.path || item.name || '');
+    const isDir = typeof item === 'object' ? !!item.isDirectory : false;
+    const name = typeof item === 'string' ? item.split('/').pop() || item : (item.name || rawPath.split('/').pop() || '');
+
+    const parts = rawPath.split('/').filter(Boolean);
+    const parentDir = parts.length > 1 ? parts.slice(0, -1).join('/') : baseDirName;
+
+    if (!groups[parentDir]) {
+      groups[parentDir] = { folders: [], files: [] };
+    }
+
+    if (isDir) {
+      if (!groups[parentDir].folders.includes(name)) {
+        groups[parentDir].folders.push(name);
+      }
+    } else {
+      if (!groups[parentDir].files.includes(name)) {
+        groups[parentDir].files.push(name);
+      }
+    }
+  }
+
+  const output: string[] = [];
+  for (const [dir, contents] of Object.entries(groups)) {
+    const dirName = dir.split('/').pop() || dir;
+    output.push(`📁 ${dirName}/`);
+    for (const f of contents.folders) {
+      output.push(`   📁 ${f}/`);
+    }
+    for (const fl of contents.files) {
+      output.push(`   • ${fl}`);
+    }
+  }
+
+  return output.join('\n');
+}
+
 /**
  * Intelligent synthesis of executed tool results if model failover or secondary turn fails.
  * Formats directory listings, search results, or expense details clearly instead of a blank stub.
@@ -213,14 +262,14 @@ function synthesizeToolSummary(toolSteps: any[]): string {
       if (res.name === 'list_storage_files') {
         const files = res.result?.files || res.result?.items || res.result?.folders || [];
         if (Array.isArray(files) && files.length > 0) {
-          parts.push(`Here are the folders and files found in your downloads:\n${files.map((f: any) => typeof f === 'string' ? `• ${f}` : `• ${f.name || f.path}`).join('\n')}`);
+          parts.push(`Here is the hierarchical structure of items found:\n\n${formatHierarchicalFileList(files, res.result?.directory || 'Downloads')}`);
         } else {
-          parts.push('No files or folders were found in your downloads directory.');
+          parts.push('No files or folders were found in your directory.');
         }
       } else if (res.name === 'search_device_storage') {
         const files = res.result?.files || [];
         if (Array.isArray(files) && files.length > 0) {
-          parts.push(`Found the following matching files:\n${files.map((f: any) => `• ${f.name || f.path}`).join('\n')}`);
+          parts.push(`Found the following matching files grouped by directory:\n\n${formatHierarchicalFileList(files, 'Storage')}`);
         } else {
           parts.push('No matching files found in device storage.');
         }

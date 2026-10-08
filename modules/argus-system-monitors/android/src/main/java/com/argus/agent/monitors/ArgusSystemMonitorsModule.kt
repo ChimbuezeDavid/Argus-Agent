@@ -155,7 +155,20 @@ class ArgusSystemMonitorsModule : Module() {
     AsyncFunction("launchApp") { packageName: String ->
       val context = appContext.reactContext ?: return@AsyncFunction false
       try {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+        val pm = context.packageManager
+        var intent = pm.getLaunchIntentForPackage(packageName)
+        if (intent == null) {
+          // Dynamic fallback: match installed applications by display label or package suffix
+          val cleanTarget = packageName.trim().lowercase()
+          val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+          for (appInfo in installed) {
+            val label = pm.getApplicationLabel(appInfo).toString().lowercase()
+            if (label == cleanTarget || label.contains(cleanTarget) || appInfo.packageName.lowercase().contains(cleanTarget)) {
+              intent = pm.getLaunchIntentForPackage(appInfo.packageName)
+              if (intent != null) break
+            }
+          }
+        }
         if (intent != null) {
           intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           context.startActivity(intent)
@@ -163,6 +176,64 @@ class ArgusSystemMonitorsModule : Module() {
         } else {
           false
         }
+      } catch (e: Exception) {
+        false
+      }
+    }
+
+    AsyncFunction("openMediaFile") { filePath: String, mimeType: String?, targetPackage: String? ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      try {
+        val cleanPath = if (filePath.startsWith("file://")) filePath.substring(7) else filePath
+        val file = File(cleanPath)
+        if (!file.exists()) {
+          return@AsyncFunction false
+        }
+
+        // Relax StrictMode VmPolicy to prevent FileUriExposedException on Nougat+
+        try {
+          val builder = android.os.StrictMode.VmPolicy.Builder()
+          android.os.StrictMode.setVmPolicy(builder.build())
+        } catch (strictEx: Exception) {}
+
+        val uri = Uri.fromFile(file)
+        val determinedMime = mimeType ?: when {
+          cleanPath.endsWith(".mp4", true) -> "video/mp4"
+          cleanPath.endsWith(".mkv", true) -> "video/x-matroska"
+          cleanPath.endsWith(".avi", true) -> "video/x-msvideo"
+          cleanPath.endsWith(".mov", true) -> "video/quicktime"
+          cleanPath.endsWith(".mp3", true) -> "audio/mpeg"
+          cleanPath.endsWith(".wav", true) -> "audio/wav"
+          cleanPath.endsWith(".flac", true) -> "audio/flac"
+          cleanPath.endsWith(".aac", true) -> "audio/aac"
+          cleanPath.endsWith(".m4a", true) -> "audio/mp4"
+          cleanPath.endsWith(".pdf", true) -> "application/pdf"
+          else -> "*/*"
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(uri, determinedMime)
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        if (!targetPackage.isNullOrBlank()) {
+          val pm = context.packageManager
+          val resolvedPkg = when (targetPackage.lowercase().trim()) {
+            "vlc" -> "org.videolan.vlc"
+            "mx player", "mxplayer" -> "com.mxtech.videoplayer.ad"
+            else -> targetPackage.trim()
+          }
+          try {
+            pm.getPackageInfo(resolvedPkg, 0)
+            intent.setPackage(resolvedPkg)
+          } catch (e: Exception) {
+            intent.setPackage(null)
+          }
+        }
+
+        context.startActivity(intent)
+        true
       } catch (e: Exception) {
         false
       }
