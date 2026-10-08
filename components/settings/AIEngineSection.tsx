@@ -386,6 +386,34 @@ export function AIEngineSection({ settings }: AIEngineSectionProps) {
           style={{ marginTop: 10 }}
         />
       </SectionCard>
+
+      {/* 5. Hands-Free Voice & Wake Word */}
+      <SectionCard
+        icon={<Ionicons name="mic-outline" size={scaleFont(20)} color="#10b981" style={{ marginRight: 8 }} />}
+        title="Hands-Free Voice & Wake Word"
+        subtitle="Control your device hands-free using the 'Hey Argus' acoustic wake word."
+      >
+        <ToggleRow
+          label="'Hey Argus' Wake Word"
+          description="Continuously listen for 'Hey Argus' to awaken the agent hands-free without touching the screen"
+          value={settings.alwaysOnVoiceEnabled}
+          onValueChange={(val) => {
+            triggerHaptic('selection');
+            settings.toggleAlwaysOnVoice(val);
+          }}
+        />
+
+        <ToggleRow
+          label="Spoken Audio Feedback"
+          description="Speak agent responses out loud using the device's native speech synthesis engine"
+          value={settings.audioFeedbackEnabled}
+          onValueChange={(val) => {
+            triggerHaptic('selection');
+            settings.toggleAudioFeedback(val);
+          }}
+          style={{ marginTop: 10 }}
+        />
+      </SectionCard>
     </View>
   );
 }

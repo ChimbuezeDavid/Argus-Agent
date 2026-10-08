@@ -31,6 +31,7 @@ import * as geofenceService from '@/services/observation/geofenceService';
 import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 import { runAgentConversation } from '@/services/agent/client';
 import { hotwordController } from '@/services/voice/hotwordService';
+import { executeOfflineAction } from '@/services/actions/offlineDeviceActions';
 
 // Extracted Modular Components
 import { TelemetryHeader } from '@/components/chat/TelemetryHeader';
@@ -205,7 +206,16 @@ export default function ArgusHomeScreen() {
   useEffect(() => {
     if (settings.alwaysOnVoiceEnabled) {
       hotwordController.startListening((command) => {
-        handleExecuteVoiceAction(command);
+        if (!command || command.toLowerCase() === 'hey argus' || command.toLowerCase() === 'argus') {
+          // Awakened without command: open Voice Modal and prompt
+          setVoiceModalVisible(true);
+          if (settings.audioFeedbackEnabled) {
+            voiceService.speak("I'm listening.");
+          }
+        } else {
+          // Hands-free command received: execute directly
+          handleExecuteVoiceAction(command);
+        }
       });
     } else {
       hotwordController.stopListening();
@@ -213,7 +223,16 @@ export default function ArgusHomeScreen() {
     return () => {
       hotwordController.stopListening();
     };
-  }, [settings.alwaysOnVoiceEnabled]);
+  }, [settings.alwaysOnVoiceEnabled, settings.audioFeedbackEnabled]);
+
+  // Pause wake-word listener while voice modal is active to prevent mic conflicts
+  useEffect(() => {
+    if (voiceModalVisible) {
+      hotwordController.pause();
+    } else if (settings.alwaysOnVoiceEnabled) {
+      hotwordController.resume();
+    }
+  }, [voiceModalVisible, settings.alwaysOnVoiceEnabled]);
 
   // Content-Aware Keyboard Auto-Scroll
   useEffect(() => {
@@ -321,6 +340,37 @@ export default function ArgusHomeScreen() {
     try {
       await conversationRepo.addMessage(convId, 'user', query);
 
+      // 1. Check if command can execute directly on-device without internet
+      const offlineResult = await executeOfflineAction(query);
+      if (offlineResult.handled) {
+        const assistantMsgId = (Date.now() + 1).toString();
+        const assistantMsg: Message = {
+          id: assistantMsgId,
+          role: 'assistant',
+          content: offlineResult.message,
+          timestamp: new Date().toISOString(),
+          toolCalls: offlineResult.actionType ? [offlineResult.actionType] : undefined,
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        await conversationRepo.addMessage(
+          convId,
+          'assistant',
+          offlineResult.message,
+          offlineResult.actionType ? [{ toolCall: offlineResult.actionType, result: offlineResult.data }] : null,
+          null
+        );
+
+        if (settings.audioFeedbackEnabled) {
+          voiceService.speak(offlineResult.message);
+        }
+
+        refreshHomeScreenData();
+        return;
+      }
+
+      // 2. Multimodal cloud intelligence with Gemini
       const conversationHistory = [...messages, newMsg].map((m) => ({
         role: m.role,
         content: m.content,
@@ -358,9 +408,18 @@ export default function ArgusHomeScreen() {
     } catch (e: any) {
       console.error('Argus Command execution error:', e);
       const isMissingKey = e.message === 'API_KEY_MISSING' || !settings.apiKey;
-      const errorText = isMissingKey
-        ? 'Gemini API key is not configured. Please open Settings ➔ AI Engine & Models to enter and save your Gemini API key.'
-        : `Argus Agent encountered an error: ${e.message || 'Network / API error'}.`;
+      const isNetworkError =
+        e.message?.toLowerCase().includes('network') ||
+        e.message?.toLowerCase().includes('fetch failed') ||
+        e.message?.toLowerCase().includes('connection') ||
+        e.message?.toLowerCase().includes('internet');
+
+      let errorText = `Argus Agent encountered an error: ${e.message || 'Execution error'}.`;
+      if (isMissingKey) {
+        errorText = 'Gemini API key is not configured. Please open Settings ➔ AI Engine & Models to enter and save your Gemini API key.';
+      } else if (isNetworkError) {
+        errorText = 'You are currently offline. Local device automations (play music on VLC, start audio recording, call contacts, log expenses, take notes, or open apps) remain available without internet.';
+      }
 
       setMessages((prev) => [
         ...prev,
