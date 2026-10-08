@@ -113,7 +113,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   githubAccount: '',
   appLockEnabled: false,
   appLockTimeout: 0,
-  alwaysOnVoiceEnabled: false,
+  alwaysOnVoiceEnabled: true,
   audioFeedbackEnabled: false,
   customWakeWord: 'Hey Argus',
   isLoading: false,
@@ -165,7 +165,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const savedGithub = settingsMap['github_account'] || '';
       const savedAppLock = settingsMap['app_lock_enabled'] === '1';
       const savedLockTimeout = settingsMap['app_lock_timeout'] ? parseInt(settingsMap['app_lock_timeout'], 10) : 0;
-      const savedAlwaysOnVoice = settingsMap['always_on_voice_enabled'] === '1';
+      const savedAlwaysOnVoice = settingsMap['always_on_voice_enabled'] !== undefined ? settingsMap['always_on_voice_enabled'] === '1' : true;
       const savedAudioFeedback = settingsMap['audio_feedback_enabled'] === '1';
       const savedWakeWord = settingsMap['custom_wake_word'] || 'Hey Argus';
       const savedOnboarding = settingsMap['has_completed_onboarding'] === '1';

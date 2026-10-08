@@ -715,7 +715,12 @@ class ArgusSystemMonitorsModule : Module() {
 
     AsyncFunction("startVoiceDaemon") { ->
       val context = appContext.reactContext ?: return@AsyncFunction false
-      val intent = Intent(context, ArgusVoiceDaemonService::class.java)
+      val prefs = context.getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+      prefs.edit().putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, true).apply()
+
+      val intent = Intent(context, ArgusVoiceDaemonService::class.java).apply {
+        putExtra("custom_wake_word", ArgusVoiceDaemonService.customWakeWord)
+      }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.startForegroundService(intent)
       } else {
@@ -726,6 +731,9 @@ class ArgusSystemMonitorsModule : Module() {
 
     AsyncFunction("stopVoiceDaemon") { ->
       val context = appContext.reactContext ?: return@AsyncFunction false
+      val prefs = context.getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+      prefs.edit().putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, false).apply()
+
       val intent = Intent(context, ArgusVoiceDaemonService::class.java)
       context.stopService(intent)
       true
@@ -737,6 +745,11 @@ class ArgusSystemMonitorsModule : Module() {
 
     AsyncFunction("setCustomWakeWord") { word: String ->
       ArgusVoiceDaemonService.customWakeWord = word
+      val context = appContext.reactContext
+      if (context != null) {
+        val prefs = context.getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(ArgusBootReceiver.KEY_CUSTOM_WAKE_WORD, word).apply()
+      }
       true
     }
 

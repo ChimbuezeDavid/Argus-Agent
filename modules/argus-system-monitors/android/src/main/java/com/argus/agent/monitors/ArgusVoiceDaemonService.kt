@@ -1,5 +1,6 @@
 package com.argus.agent.monitors
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -17,6 +19,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
+import androidx.core.content.ContextCompat
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -83,6 +87,17 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         instance = this
         Log.i(TAG, "ArgusVoiceDaemonService onCreate")
 
+        // Load saved wake word from persistent storage
+        try {
+            val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+            val savedWord = prefs.getString(ArgusBootReceiver.KEY_CUSTOM_WAKE_WORD, null)
+            if (!savedWord.isNullOrBlank()) {
+                customWakeWord = savedWord
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load saved wake word: ${e.message}")
+        }
+
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
 
         try {
@@ -102,13 +117,22 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "ArgusVoiceDaemonService onStartCommand")
+        Log.i(TAG, "ArgusVoiceDaemonService onStartCommand (VLC-style background guard)")
         isRunning = true
         isDestroyed = false
 
-        val incomingWakeWord = intent?.getStringExtra("custom_wake_word")
-        if (!incomingWakeWord.isNullOrBlank()) {
-            customWakeWord = incomingWakeWord.trim()
+        // Mark daemon as actively enabled in persistent storage
+        try {
+            val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, true).apply()
+
+            val incomingWakeWord = intent?.getStringExtra("custom_wake_word")
+            if (!incomingWakeWord.isNullOrBlank()) {
+                customWakeWord = incomingWakeWord.trim()
+                prefs.edit().putString(ArgusBootReceiver.KEY_CUSTOM_WAKE_WORD, customWakeWord).apply()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist daemon state: ${e.message}")
         }
 
         acquireWakeLock()
@@ -136,8 +160,10 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                     "argus:VoiceDaemonWakeLock"
                 )?.apply {
                     setReferenceCounted(false)
-                    acquire(10 * 60 * 1000L) // 10 minutes rolling timeout
+                    acquire() // Indefinite background wake lock while service is running
                 }
+            } else if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
@@ -195,14 +221,21 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
         val iconRes = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.ic_btn_speak_now
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(iconRes)
             .setOngoing(true)
+            .setAutoCancel(false)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(pendingIntent)
-            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+
+        return builder.build()
     }
 
     private fun startContinuousRecognizer() {
@@ -210,6 +243,12 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
         mainHandler.post {
             try {
+                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "RECORD_AUDIO permission not granted, pausing continuous recognizer")
+                    scheduleRecognizerRestart(3000)
+                    return@post
+                }
+
                 if (speechRecognizer != null) {
                     try {
                         speechRecognizer?.cancel()
@@ -469,12 +508,39 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.i(TAG, "onTaskRemoved: App swiped away from recents, keeping Voice Daemon alive")
+        Log.i(TAG, "onTaskRemoved: App task swiped from recents; preserving Voice Daemon in background like VLC")
+
+        try {
+            val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, true).apply()
+        } catch (e: Exception) {}
+
         acquireWakeLock()
         val notification = buildForegroundNotification()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.notify(NOTIFICATION_ID, notification)
-        scheduleRecognizerRestart(500)
+
+        // Arm AlarmManager fallback to resurrect the daemon after 1000ms if OS aggressively terminates the process
+        try {
+            val restartIntent = Intent(applicationContext, ArgusRestartReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                applicationContext,
+                1001,
+                restartIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            val triggerAt = SystemClock.elapsedRealtime() + 1000
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+            } else {
+                alarmManager?.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AlarmManager restart fallback failed: ${e.message}")
+        }
+
+        scheduleRecognizerRestart(300)
     }
 
     override fun onDestroy() {
@@ -500,5 +566,29 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
             tts = null
             ttsReady = false
         } catch (e: Exception) {}
+
+        // If the service was destroyed by OS while still enabled in persistent settings, resurrect it!
+        try {
+            val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+            if (prefs.getBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, false)) {
+                Log.i(TAG, "Service destroyed by OS while enabled; arming resurrection alarm")
+                val restartIntent = Intent(applicationContext, ArgusRestartReceiver::class.java)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    applicationContext,
+                    1002,
+                    restartIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                val triggerAt = SystemClock.elapsedRealtime() + 1500
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+                } else {
+                    alarmManager?.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Resurrection alarm failed: ${e.message}")
+        }
     }
 }
