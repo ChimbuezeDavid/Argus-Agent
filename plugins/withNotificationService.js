@@ -77,7 +77,72 @@ function withNotificationService(config) {
           },
         ],
       });
-      console.log(`[Config Plugin] Injected ${accessibilityServiceClass} into AndroidManifest.xml`);
+    // 3. Persistent Voice Daemon Service (Foreground Service with Microphone)
+    const voiceDaemonServiceClass = 'com.argus.agent.monitors.ArgusVoiceDaemonService';
+    const voiceDaemonExists = mainApplication.service.some(
+      (service) => service.$['android:name'] === voiceDaemonServiceClass
+    );
+
+    if (!voiceDaemonExists) {
+      mainApplication.service.push({
+        $: {
+          'android:name': voiceDaemonServiceClass,
+          'android:label': 'Argus Voice Guard',
+          'android:enabled': 'true',
+          'android:foregroundServiceType': 'microphone',
+          'android:stopWithTask': 'false',
+          'android:process': ':daemon',
+          'android:exported': 'false',
+        },
+      });
+      console.log(`[Config Plugin] Injected ${voiceDaemonServiceClass} into AndroidManifest.xml`);
+    }
+
+    // Ensure receivers array exists
+    if (!mainApplication.receiver) {
+      mainApplication.receiver = [];
+    }
+
+    // 4. Boot Receiver
+    const bootReceiverClass = 'com.argus.agent.monitors.ArgusBootReceiver';
+    const bootReceiverExists = mainApplication.receiver.some(
+      (receiver) => receiver.$['android:name'] === bootReceiverClass
+    );
+
+    if (!bootReceiverExists) {
+      mainApplication.receiver.push({
+        $: {
+          'android:name': bootReceiverClass,
+          'android:enabled': 'true',
+          'android:exported': 'true',
+        },
+        'intent-filter': [
+          {
+            action: [
+              { $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } },
+              { $: { 'android:name': 'android.intent.action.MY_PACKAGE_REPLACED' } },
+              { $: { 'android:name': 'android.intent.action.QUICKBOOT_POWERON' } },
+              { $: { 'android:name': 'com.htc.intent.action.QUICKBOOT_POWERON' } },
+            ],
+          },
+        ],
+      });
+    }
+
+    // 5. Restart Receiver
+    const restartReceiverClass = 'com.argus.agent.monitors.ArgusRestartReceiver';
+    const restartReceiverExists = mainApplication.receiver.some(
+      (receiver) => receiver.$['android:name'] === restartReceiverClass
+    );
+
+    if (!restartReceiverExists) {
+      mainApplication.receiver.push({
+        $: {
+          'android:name': restartReceiverClass,
+          'android:enabled': 'true',
+          'android:exported': 'false',
+        },
+      });
     }
 
     return config;

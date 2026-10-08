@@ -552,7 +552,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.i(TAG, "onTaskRemoved: App task swiped from recents; preserving Voice Daemon in background like VLC")
+        Log.i(TAG, "onTaskRemoved: Recents swipe detected; scheduling immediate self-healing revival via AlarmManager")
 
         try {
             val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
@@ -564,27 +564,82 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         val manager = getSystemService(NotificationManager::class.java)
         manager?.notify(NOTIFICATION_ID, notification)
 
-        // Arm AlarmManager fallback to resurrect the daemon after 1000ms if OS aggressively terminates the process
+        // Reschedule restart via AlarmManager as self-healing insurance policy
+        scheduleServiceRestart()
+        scheduleRecognizerRestart(300)
+    }
+
+    private fun scheduleServiceRestart() {
         try {
-            val restartIntent = Intent(applicationContext, ArgusRestartReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(
+            val restartIntent = Intent(applicationContext, ArgusVoiceDaemonService::class.java).apply {
+                putExtra("custom_wake_word", customWakeWord)
+            }
+            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    this,
+                    1,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+            } else {
+                PendingIntent.getService(
+                    this,
+                    1,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+            }
+
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val triggerTime = System.currentTimeMillis() + 1000
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                }
+            } catch (secEx: SecurityException) {
+                Log.w(TAG, "Exact alarm restricted; falling back to setAndAllowWhileIdle: ${secEx.message}")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                }
+            }
+
+            // Dual insurance: Also arm BroadcastReceiver fallback
+            val broadcastIntent = Intent(applicationContext, ArgusRestartReceiver::class.java)
+            val broadcastPendingIntent = PendingIntent.getBroadcast(
                 applicationContext,
                 1001,
-                restartIntent,
+                broadcastIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
             )
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-            val triggerAt = SystemClock.elapsedRealtime() + 1000
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
-            } else {
-                alarmManager?.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
-            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime + 500,
+                        broadcastPendingIntent
+                    )
+                }
+            } catch (e: Exception) {}
         } catch (e: Exception) {
-            Log.w(TAG, "AlarmManager restart fallback failed: ${e.message}")
+            Log.w(TAG, "scheduleServiceRestart failed: ${e.message}")
         }
-
-        scheduleRecognizerRestart(300)
     }
 
     override fun onDestroy() {
@@ -620,21 +675,8 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         try {
             val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
             if (prefs.getBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, false)) {
-                Log.i(TAG, "Service destroyed by OS while enabled; arming resurrection alarm")
-                val restartIntent = Intent(applicationContext, ArgusRestartReceiver::class.java)
-                val pendingIntent = PendingIntent.getBroadcast(
-                    applicationContext,
-                    1002,
-                    restartIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-                )
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                val triggerAt = SystemClock.elapsedRealtime() + 1500
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
-                } else {
-                    alarmManager?.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
-                }
+                Log.i(TAG, "Service destroyed by OS while enabled; executing self-healing resurrection")
+                scheduleServiceRestart()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Resurrection alarm failed: ${e.message}")

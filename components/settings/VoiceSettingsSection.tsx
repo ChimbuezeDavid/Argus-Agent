@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { SectionCard, ToggleRow, ChipSelector, ChipOption } from '@/components/shared';
+import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 
 export const WAKE_WORD_PRESETS: ChipOption[] = [
   { id: 'Hey Argus', label: 'Hey Argus' },
@@ -22,6 +23,28 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
 
   const [customWakeWordInput, setCustomWakeWordInput] = useState(settings.customWakeWord || 'Hey Argus');
   const [isSaving, setIsSaving] = useState(false);
+  const [isBatteryExempt, setIsBatteryExempt] = useState(false);
+
+  const checkBatteryStatus = useCallback(async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const exempt = await ArgusSystemMonitors.isIgnoringBatteryOptimizations();
+        setIsBatteryExempt(!!exempt);
+      } catch (e) {
+        console.warn('Failed to check battery optimization status:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    checkBatteryStatus();
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkBatteryStatus();
+      }
+    });
+    return () => sub.remove();
+  }, [checkBatteryStatus]);
 
   useEffect(() => {
     if (settings.customWakeWord) {
@@ -52,6 +75,15 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
   const handleClearInput = () => {
     triggerHaptic('light');
     setCustomWakeWordInput('');
+  };
+
+  const handleRequestBatteryExemption = async () => {
+    triggerHaptic('selection');
+    try {
+      await ArgusSystemMonitors.requestIgnoreBatteryOptimizations();
+    } catch (e: any) {
+      Alert.alert('Battery Settings', 'Could not open battery optimization settings.');
+    }
   };
 
   return (
@@ -105,6 +137,68 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
           </View>
           <Text style={[styles.statusDescription, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
             Energy-optimized native audio pipeline with exact alarms ensures continuous acoustic vigilance without battery drain.
+          </Text>
+        </View>
+
+        {/* OEM Background Persistence / Battery Optimization Exemption */}
+        <View
+          style={[
+            styles.batteryStatusCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: isBatteryExempt ? '#10b98140' : '#f59e0b40',
+            },
+          ]}
+        >
+          <View style={styles.batteryStatusHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.batteryTitle, { color: colors.text, fontSize: scaleFont(12) }]}>
+                Recents Swipe Persistence
+              </Text>
+              <Text style={[styles.batteryDesc, { color: colors.textMuted, fontSize: scaleFont(10.5) }]}>
+                {isBatteryExempt
+                  ? 'Battery optimization exempted. Argus daemon maintains active listening when swiped from recent apps.'
+                  : 'Android and OEM ROMs kill background services when swiped from Recents unless battery optimization is disabled.'}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.batteryBadge,
+                { backgroundColor: isBatteryExempt ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)' },
+              ]}
+            >
+              <Ionicons
+                name={isBatteryExempt ? 'shield-checkmark' : 'warning-outline'}
+                size={12}
+                color={isBatteryExempt ? '#10b981' : '#f59e0b'}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.batteryBadgeText,
+                  { color: isBatteryExempt ? '#10b981' : '#f59e0b', fontSize: scaleFont(10) },
+                ]}
+              >
+                {isBatteryExempt ? 'Unrestricted' : 'Optimized'}
+              </Text>
+            </View>
+          </View>
+
+          {!isBatteryExempt && Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={[styles.exemptButton, { backgroundColor: '#f59e0b18', borderColor: '#f59e0b60' }]}
+              onPress={handleRequestBatteryExemption}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="battery-charging-outline" size={15} color="#f59e0b" style={{ marginRight: 6 }} />
+              <Text style={[styles.exemptButtonText, { color: '#f59e0b', fontSize: scaleFont(11.5) }]}>
+                Exempt from Battery Optimizations
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <Text style={[styles.oemNote, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
+            For Xiaomi, Samsung, Oppo/Vivo, or Infinix/Tecno: Set App Battery behavior to "Unrestricted" and enable "Auto-start" in App Info.
           </Text>
         </View>
       </SectionCard>
@@ -350,5 +444,51 @@ const styles = StyleSheet.create({
   },
   hciSaveBtnText: {
     fontWeight: '700',
+  },
+  batteryStatusCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+  batteryStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  batteryTitle: {
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  batteryDesc: {
+    lineHeight: 15,
+  },
+  batteryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  batteryBadgeText: {
+    fontWeight: '700',
+  },
+  exemptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  exemptButtonText: {
+    fontWeight: '700',
+  },
+  oemNote: {
+    marginTop: 8,
+    lineHeight: 14,
+    fontStyle: 'italic',
   },
 });

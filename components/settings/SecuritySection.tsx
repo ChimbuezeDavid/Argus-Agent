@@ -16,18 +16,21 @@ export function SecuritySection({ settings }: SecuritySectionProps) {
   const [hasUsagePerm, setHasUsagePerm] = useState(false);
   const [hasNotificationPerm, setHasNotificationPerm] = useState(false);
   const [hasAccessibilityPerm, setHasAccessibilityPerm] = useState(false);
+  const [hasBatteryExempt, setHasBatteryExempt] = useState(false);
 
   const checkPermissions = useCallback(async () => {
     if (Platform.OS === 'android') {
       try {
-        const [uPerm, nPerm, aPerm] = await Promise.all([
+        const [uPerm, nPerm, aPerm, bExempt] = await Promise.all([
           ArgusSystemMonitors?.hasUsageStatsPermission?.(),
           ArgusSystemMonitors?.hasNotificationListenerPermission?.(),
           isAccessibilityEnabled(),
+          ArgusSystemMonitors?.isIgnoringBatteryOptimizations?.(),
         ]);
         setHasUsagePerm(!!uPerm);
         setHasNotificationPerm(!!nPerm);
         setHasAccessibilityPerm(!!aPerm);
+        setHasBatteryExempt(!!bExempt);
       } catch (e) {
         console.warn('Error checking security permissions:', e);
       }
@@ -198,6 +201,40 @@ export function SecuritySection({ settings }: SecuritySectionProps) {
             <Ionicons name="hardware-chip-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
             <Text style={[styles.actionBtnText, { color: colors.primary, fontSize: scaleFont(12) }]}>
               Grant Usage Access
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.permRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.permTitle, { color: colors.text, fontSize: scaleFont(13) }]}>
+              Battery Optimization Exemption
+            </Text>
+            <Text style={[styles.permDesc, { color: colors.textMuted, fontSize: scaleFont(10) }]}>
+              Allows daemon & background services to survive Recents swipe
+            </Text>
+          </View>
+          <View style={[styles.permBadge, hasBatteryExempt ? styles.permBadgeOn : styles.permBadgeOff]}>
+            <Text style={[styles.permBadgeText, hasBatteryExempt ? styles.permBadgeTextOn : styles.permBadgeTextOff]}>
+              {hasBatteryExempt ? 'Unrestricted' : 'Optimized'}
+            </Text>
+          </View>
+        </View>
+
+        {!hasBatteryExempt && Platform.OS === 'android' && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => {
+              triggerHaptic('selection');
+              ArgusSystemMonitors.requestIgnoreBatteryOptimizations();
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="battery-charging-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.actionBtnText, { color: colors.primary, fontSize: scaleFont(12) }]}>
+              Exempt from Battery Optimizations
             </Text>
           </TouchableOpacity>
         )}
