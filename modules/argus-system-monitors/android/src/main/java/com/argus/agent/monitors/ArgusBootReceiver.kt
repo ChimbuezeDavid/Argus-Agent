@@ -17,6 +17,7 @@ class ArgusBootReceiver : BroadcastReceiver() {
         const val TAG = "ArgusBootReceiver"
         const val PREFS_NAME = "argus_voice_prefs"
         const val KEY_DAEMON_ENABLED = "voice_daemon_enabled"
+        const val KEY_IS_RUNNING = "voice_daemon_is_running"
         const val KEY_CUSTOM_WAKE_WORD = "custom_wake_word"
     }
 

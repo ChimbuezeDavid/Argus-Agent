@@ -1,6 +1,6 @@
-// Executive Welcome Splash Screen for Argus Agent
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, Animated, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useHCITheme } from '@/hooks/useHCITheme';
 
@@ -9,6 +9,7 @@ interface WelcomeSplashScreenProps {
 }
 
 export function WelcomeSplashScreen({ onFinish }: WelcomeSplashScreenProps) {
+  const insets = useSafeAreaInsets();
   const { colors, isDark, scaleFont } = useHCITheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
@@ -86,12 +87,12 @@ export function WelcomeSplashScreen({ onFinish }: WelcomeSplashScreenProps) {
       </Animated.View>
 
       {/* Footer Powered By */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { bottom: Math.max(insets.bottom, 24) + 16 }]}>
         <Text style={[styles.footerSub, { color: colors.textMuted, fontSize: scaleFont(10) }]}>POWERED BY</Text>
         <View style={styles.footerBrandRow}>
           <MaterialCommunityIcons name="google" size={14} color={colors.primary} style={{ marginRight: 4 }} />
           <Text style={[styles.footerBrand, { color: colors.text, fontSize: scaleFont(12) }]}>
-            Gemini 3.5 & 3.7
+            Gemini 2.5 & 3.7 Flash
           </Text>
         </View>
       </View>

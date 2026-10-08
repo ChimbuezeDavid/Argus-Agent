@@ -224,34 +224,6 @@ export default function SettingsModal() {
       >
         {activeCategory === null ? (
           <>
-            {/* Quick Access: System Permissions & Background Setup */}
-            <TouchableOpacity
-              style={[styles.permissionsBanner, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-              onPress={() => {
-                triggerHaptic('selection');
-                setShowPermissionsModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.bannerIconBox, { backgroundColor: `${colors.primary}20` }]}>
-                <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.bannerTitle, { color: colors.text, fontSize: scaleFont(13.5) }]}>
-                    System Permissions Setup
-                  </Text>
-                  <View style={[styles.bannerBadge, { backgroundColor: '#10b98120' }]}>
-                    <Text style={{ color: '#10b981', fontSize: scaleFont(9.5), fontWeight: '700' }}>v2.0 Checklist</Text>
-                  </View>
-                </View>
-                <Text style={[styles.bannerSubtitle, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
-                  Configure Assistant, Battery Optimization, and Background Mic privileges.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-
             {/* Android-Style Category Master List */}
             <View style={[styles.categoryListCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {CATEGORIES.map((cat, idx) => (

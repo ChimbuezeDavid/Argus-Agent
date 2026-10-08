@@ -124,7 +124,10 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         // Mark daemon as actively enabled in persistent storage
         try {
             val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, true).apply()
+            prefs.edit()
+                .putBoolean(ArgusBootReceiver.KEY_DAEMON_ENABLED, true)
+                .putBoolean(ArgusBootReceiver.KEY_IS_RUNNING, true)
+                .apply()
 
             val incomingWakeWord = intent?.getStringExtra("custom_wake_word")
             if (!incomingWakeWord.isNullOrBlank()) {
@@ -549,6 +552,11 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         isDestroyed = true
         isRunning = false
         instance = null
+
+        try {
+            val prefs = getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(ArgusBootReceiver.KEY_IS_RUNNING, false).apply()
+        } catch (e: Exception) {}
 
         mainHandler.removeCallbacksAndMessages(null)
         removeFloatingCapsule()

@@ -623,20 +623,6 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
             </View>
           )}
 
-          {/* Device Tip */}
-          <View style={[styles.tipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.tipHeaderRow}>
-              <Ionicons name="information-circle-outline" size={16} color="#38bdf8" style={{ marginRight: 6 }} />
-              <Text style={[styles.tipTitle, { color: colors.text, fontSize: scaleFont(11.5) }]}>
-                Tecno / Samsung / Xiaomi Device Tip
-              </Text>
-            </View>
-            <Text style={[styles.tipText, { color: colors.textSecondary, fontSize: scaleFont(10.5) }]}>
-              • Tecno/Infinix: In Phone Master → Auto-start management, ensure Argus is enabled.{"\n"}
-              • Recent Apps overview: Pull down on Argus card and tap the Lock 🔒 icon.
-            </Text>
-          </View>
-
           {/* Finish & Launch Button */}
           <TouchableOpacity
             style={[styles.finishBtn, { backgroundColor: colors.primary }]}

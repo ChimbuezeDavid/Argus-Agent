@@ -740,7 +740,13 @@ class ArgusSystemMonitorsModule : Module() {
     }
 
     AsyncFunction("isVoiceDaemonRunning") { ->
-      ArgusVoiceDaemonService.isRunning
+      val context = appContext.reactContext
+      if (context != null) {
+        val prefs = context.getSharedPreferences(ArgusBootReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.getBoolean(ArgusBootReceiver.KEY_IS_RUNNING, false) || ArgusVoiceDaemonService.isRunning
+      } else {
+        ArgusVoiceDaemonService.isRunning
+      }
     }
 
     AsyncFunction("setCustomWakeWord") { word: String ->

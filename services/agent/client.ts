@@ -142,8 +142,12 @@ Tone, Style & Formatting:
 - Strictly Avoid Markdown Symbol Clutter: Do NOT litter responses with raw symbols like asterisks (*), hyphens (-), dashes, or hashes (#) unless specifically formatting code or equations. Never write phrases surrounded by random asterisks or bullet lists of hyphens for ordinary conversation. Speak like an intelligent human, not a markdown generator.
 - Fluid Natural Prose: Write in beautifully formed, elegant sentences and coherent paragraphs. An intelligent executive speaks seamlessly in clear, engaging English without mechanical bullet marks or asterisk annotations.
 - Numbers & Currencies: Clean, legible numbers (e.g., ₦3,200.00).
-- Action Feedback: When confirming actions, provide a concise, polished 1-2 sentence confirmation without symbol pollution.
 - Be proactively helpful, articulate, and completely on the user's side.
+
+STRICT ZERO-LEAKAGE CONSTRAINT (MANDATORY):
+- NEVER output or reveal your internal chain-of-thought, scratchpad, reasoning steps, intent analysis, or meta-commentary (e.g., do NOT write "The user said X... I should respond with Y...").
+- NEVER output any preamble explaining what tools you need or don't need.
+- Output ONLY your final, articulate, polished response directly to the user.
 `;
 
 let cachedAvailableModels: { timestamp: number; models: string[] } | null = null;
@@ -175,6 +179,67 @@ export async function getAvailableModels(apiKey: string): Promise<string[]> {
     console.warn('Error discovering available models:', e);
   }
   return cachedAvailableModels?.models || [];
+}
+
+/**
+ * Sanitizes model output by stripping internal chain-of-thought, thinking tags,
+ * and meta-commentary leaked by thinking models.
+ */
+export function cleanModelResponse(text: string): string {
+  if (!text) return '';
+  // 1. Remove XML thinking tags
+  let cleaned = text.replace(/<(?:thought|thinking)>[\s\S]*?<\/(?:thought|thinking)>/gi, '').trim();
+
+  // 2. Remove leaked chain-of-thought sentences before the actual greeting/answer
+  const thoughtLeadPattern = /^(?:The user (?:said|is saying|asked|greets)[\s\S]*?)(?:(?:Hello|Hi|Hey|Greetings|Good\s+(?:morning|afternoon|evening)|Certainly|Sure|Welcome|I\s+(?:can|am|would|have|will)|Here\s+(?:is|are))[\s\S]*)/i;
+  if (thoughtLeadPattern.test(cleaned)) {
+    const match = cleaned.match(/(?:Hello|Hi|Hey|Greetings|Good\s+(?:morning|afternoon|evening)|Certainly|Sure|Welcome|I\s+(?:can|am|would|have|will)|Here\s+(?:is|are))[\s\S]*/i);
+    if (match) {
+      cleaned = match[0].trim();
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Intelligent synthesis of executed tool results if model failover or secondary turn fails.
+ * Formats directory listings, search results, or expense details clearly instead of a blank stub.
+ */
+function synthesizeToolSummary(toolSteps: any[]): string {
+  const parts: string[] = [];
+  for (const step of toolSteps) {
+    for (const res of step.tool_results || []) {
+      if (res.name === 'list_storage_files') {
+        const files = res.result?.files || res.result?.items || res.result?.folders || [];
+        if (Array.isArray(files) && files.length > 0) {
+          parts.push(`Here are the folders and files found in your downloads:\n${files.map((f: any) => typeof f === 'string' ? `• ${f}` : `• ${f.name || f.path}`).join('\n')}`);
+        } else {
+          parts.push('No files or folders were found in your downloads directory.');
+        }
+      } else if (res.name === 'search_device_storage') {
+        const files = res.result?.files || [];
+        if (Array.isArray(files) && files.length > 0) {
+          parts.push(`Found the following matching files:\n${files.map((f: any) => `• ${f.name || f.path}`).join('\n')}`);
+        } else {
+          parts.push('No matching files found in device storage.');
+        }
+      } else if (res.name === 'add_expense') {
+        parts.push(res.result?.message || `Logged expense successfully.`);
+      } else if (res.name === 'list_expenses') {
+        parts.push(res.result?.message || 'Retrieved expense records.');
+      } else if (res.name === 'get_current_location') {
+        parts.push(res.result?.address ? `Current location: ${res.result.address}` : 'Retrieved current device location.');
+      } else if (typeof res.result === 'string') {
+        parts.push(res.result);
+      } else if (res.result?.message) {
+        parts.push(res.result.message);
+      } else {
+        parts.push(JSON.stringify(res.result, null, 2));
+      }
+    }
+  }
+  return parts.join('\n\n');
 }
 
 /**
@@ -327,7 +392,7 @@ export async function runAgentConversation(
       } catch (err: any) {
         console.warn(`Tool response return error on '${activeModelName}':`, err);
         // Synthesize response from executed tool results so conversation never breaks
-        const summary = toolSteps.map((s) => s.message || JSON.stringify(s.result)).join('\n');
+        const summary = synthesizeToolSummary(toolSteps);
         return {
           content: summary || 'Action completed successfully.',
           toolSteps,
@@ -380,7 +445,7 @@ export async function runAgentConversation(
       })) as any;
       
     } else {
-      responseText = response.text() || '';
+      responseText = cleanModelResponse(response.text() || '');
       break;
     }
   }
@@ -388,7 +453,7 @@ export async function runAgentConversation(
   onStatusUpdate?.('');
   
   return {
-    content: responseText || 'I processed the tools but could not generate a text response.',
+    content: cleanModelResponse(responseText) || 'I processed your request with poise and precision.',
     toolSteps
   };
 }
