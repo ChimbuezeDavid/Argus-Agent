@@ -30,6 +30,7 @@ import { useHCITheme } from '@/hooks/useHCITheme';
 // Modular Category Detail Views
 import { SecuritySection } from '@/components/settings/SecuritySection';
 import { AIEngineSection } from '@/components/settings/AIEngineSection';
+import { VoiceSettingsSection } from '@/components/settings/VoiceSettingsSection';
 import { NotificationsSection } from '@/components/settings/NotificationsSection';
 import { DisplayThemeSection } from '@/components/settings/DisplayThemeSection';
 import { InteractionFeedbackSection } from '@/components/settings/InteractionFeedbackSection';
@@ -40,6 +41,7 @@ import { OnboardingAccessModal } from '@/components/shared/OnboardingAccessModal
 type SettingsCategory =
   | 'security'
   | 'ai'
+  | 'voice'
   | 'notifications'
   | 'display'
   | 'interaction'
@@ -111,6 +113,14 @@ export default function SettingsModal() {
       icon: 'hardware-chip',
       iconColor: '#8b5cf6',
       badge: '3.7 & 3.8',
+    },
+    {
+      id: 'voice',
+      title: 'Voice & Wake Word',
+      subtitle: `${settings.alwaysOnVoiceEnabled ? 'Daemon active' : 'Daemon paused'} • Hotword: "${settings.customWakeWord || 'Hey Argus'}"`,
+      icon: 'mic',
+      iconColor: '#06b6d4',
+      badge: settings.alwaysOnVoiceEnabled ? 'Always-On' : undefined,
     },
     {
       id: 'notifications',
@@ -283,6 +293,7 @@ export default function SettingsModal() {
           <View style={styles.detailWrapper}>
             {activeCategory === 'security' && <SecuritySection settings={settings} />}
             {activeCategory === 'ai' && <AIEngineSection settings={settings} />}
+            {activeCategory === 'voice' && <VoiceSettingsSection settings={settings} />}
             {activeCategory === 'notifications' && <NotificationsSection settings={settings} />}
             {activeCategory === 'display' && <DisplayThemeSection settings={settings} />}
             {activeCategory === 'interaction' && <InteractionFeedbackSection settings={settings} />}
