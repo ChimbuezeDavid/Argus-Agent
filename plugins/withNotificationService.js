@@ -77,6 +77,9 @@ function withNotificationService(config) {
           },
         ],
       });
+      console.log(`[Config Plugin] Injected ${accessibilityServiceClass} into AndroidManifest.xml`);
+    }
+
     // 3. Persistent Voice Daemon Service (Foreground Service with Microphone)
     const voiceDaemonServiceClass = 'com.argus.agent.monitors.ArgusVoiceDaemonService';
     const voiceDaemonExists = mainApplication.service.some(
