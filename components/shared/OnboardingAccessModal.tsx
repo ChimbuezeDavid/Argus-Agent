@@ -539,6 +539,19 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
                 </TouchableOpacity>
               )}
             </View>
+            {!hasStoragePerm && (
+              <View style={[styles.tipCard, { backgroundColor: '#0ea5e912', borderColor: '#0ea5e933', marginTop: 10, marginBottom: 0 }]}>
+                <View style={styles.tipHeaderRow}>
+                  <Ionicons name="information-circle-outline" size={14} color="#0ea5e9" style={{ marginRight: 6 }} />
+                  <Text style={[styles.tipTitle, { color: '#0ea5e9', fontSize: scaleFont(11.5) }]}>
+                    If toggle is disabled
+                  </Text>
+                </View>
+                <Text style={[styles.tipText, { color: colors.textSecondary, fontSize: scaleFont(10.5) }]}>
+                  On Android 13+, sideloaded apps require permission unblocking: Open Settings &gt; Apps &gt; Argus Agent &gt; tap ⋮ (top-right) &gt; "Allow restricted settings".
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* 3.3 Screen Time */}

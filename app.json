@@ -31,7 +31,8 @@
         "READ_SMS",
         "RECEIVE_SMS",
         "POST_NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "MANAGE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
