@@ -9,14 +9,14 @@ import { listActiveLearnedRules } from '../database/learnedRulesRepo';
  * Retrieves the Gemini API key from secure storage.
  */
 export async function getGeminiApiKey(): Promise<string | null> {
-  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
-  if (envKey) return envKey;
   try {
     const key = await SecureStore.getItemAsync('GEMINI_API_KEY');
     if (key && key.trim()) return key.trim();
   } catch (error) {
     console.error('Failed to read Gemini API key from SecureStore:', error);
   }
+  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+  if (envKey) return envKey;
   return null;
 }
 

@@ -1,6 +1,7 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { SectionCard, ToggleRow, ChipSelector, ChipOption } from '@/components/shared';
 
@@ -65,28 +66,224 @@ interface AIEngineSectionProps {
 export function AIEngineSection({ settings }: AIEngineSectionProps) {
   const { colors, scaleFont, triggerHaptic } = useHCITheme();
 
+  // Manual API Key State
+  const [keyInput, setKeyInput] = useState('');
+  const [isSecure, setIsSecure] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+
+  const envKey = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+  const currentKey = settings.apiKey || envKey;
+  const hasCustomKey = !!settings.apiKey && settings.apiKey !== envKey;
+
   const tempOptions: ChipOption[] = [
     { id: '0.0', label: '0.0', description: 'Precise' },
     { id: '0.2', label: '0.2', description: 'Balanced' },
     { id: '0.7', label: '0.7', description: 'Creative' },
   ];
 
+  const handleSaveCustomKey = async () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) {
+      Alert.alert('Required', 'Please enter a valid Google Gemini API key.');
+      return;
+    }
+    triggerHaptic('selection');
+    setIsSaving(true);
+    try {
+      await settings.setApiKey(trimmed);
+      setKeyInput('');
+      triggerHaptic('success');
+      Alert.alert('Key Saved', 'Custom Gemini API key saved to device SecureStore.');
+    } catch (e: any) {
+      Alert.alert('Save Error', e.message || 'Failed to save API key.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetToEnv = async () => {
+    triggerHaptic('warning');
+    Alert.alert(
+      'Reset to .env Key',
+      'Remove your custom API key and fall back to the built-in .env key?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            await SecureStore.deleteItemAsync('GEMINI_API_KEY');
+            await settings.setApiKey('');
+            triggerHaptic('success');
+            Alert.alert('Reset Complete', 'Now using built-in environment API key.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleTestKey = async () => {
+    const keyToTest = keyInput.trim() || currentKey;
+    if (!keyToTest) {
+      Alert.alert('No Key', 'Please enter or save an API key to test.');
+      return;
+    }
+
+    triggerHaptic('selection');
+    setIsTesting(true);
+
+    try {
+      const activeModel = settings.geminiModel || 'gemini-3.8-flash';
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${keyToTest}`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Respond with the single word: OK' }] }],
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.status === 200) {
+        triggerHaptic('success');
+        Alert.alert(
+          'API Key Valid & Ready!',
+          `Successfully connected to ${activeModel}. Response: "${data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'OK'}".`
+        );
+      } else if (res.status === 402) {
+        triggerHaptic('warning');
+        Alert.alert(
+          'Quota Depleted (HTTP 402)',
+          'This API key belongs to a project whose prepayment credits are depleted. Please top up credits or use a key from a fresh account.'
+        );
+      } else if (res.status === 400) {
+        triggerHaptic('warning');
+        Alert.alert('Invalid Key (HTTP 400)', data?.error?.message || 'API key not valid.');
+      } else {
+        triggerHaptic('warning');
+        Alert.alert(`Error (${res.status})`, data?.error?.message || 'Failed connecting to Gemini endpoint.');
+      }
+    } catch (e: any) {
+      Alert.alert('Network Error', e.message || 'Could not reach Google servers.');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      {/* 1. Environment API Key Status Card */}
-      <View style={[styles.envKeyCard, { backgroundColor: colors.surface, borderColor: '#10b981' }]}>
-        <View style={styles.envKeyHeader}>
-          <View style={styles.envKeyBadge}>
-            <Ionicons name="checkmark-circle" size={16} color="#10b981" style={{ marginRight: 6 }} />
-            <Text style={[styles.envKeyBadgeText, { color: '#10b981', fontSize: scaleFont(12) }]}>
-              API Key Active (.env)
+      {/* 1. Interactive API Key Configuration Card */}
+      <View style={[styles.keyConfigCard, { backgroundColor: colors.surface, borderColor: hasCustomKey ? '#8b5cf6' : '#10b981' }]}>
+        <View style={styles.keyHeaderRow}>
+          <View style={styles.keyBadge}>
+            <Ionicons
+              name={hasCustomKey ? 'key-outline' : 'checkmark-circle'}
+              size={16}
+              color={hasCustomKey ? '#8b5cf6' : '#10b981'}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.keyBadgeText,
+                { color: hasCustomKey ? '#8b5cf6' : '#10b981', fontSize: scaleFont(12) },
+              ]}
+            >
+              {hasCustomKey ? 'Custom User Key Active' : 'Default (.env) Key Active'}
             </Text>
           </View>
-          <View style={[styles.activeDot, { backgroundColor: '#10b981' }]} />
+          <View style={[styles.activeDot, { backgroundColor: hasCustomKey ? '#8b5cf6' : '#10b981' }]} />
         </View>
-        <Text style={[styles.envKeyDesc, { color: colors.textSecondary, fontSize: scaleFont(12) }]}>
-          Your Google Gemini API key is routed securely from the on-device environment file. Manual entry is not required.
+
+        <Text style={[styles.keyStatusText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
+          {hasCustomKey
+            ? `Active Key: ••••••••••••${currentKey.slice(-6)} (Saved in SecureStore)`
+            : envKey
+            ? `Active Key: ••••••••••••${envKey.slice(-6)} (Loaded from .env)`
+            : 'No API key configured.'}
         </Text>
+
+        {/* Manual Input Field */}
+        <View style={styles.inputWrap}>
+          <TextInput
+            style={[
+              styles.keyInput,
+              {
+                backgroundColor: colors.background,
+                color: colors.text,
+                borderColor: colors.border,
+                fontSize: scaleFont(12),
+              },
+            ]}
+            placeholder="Paste your Gemini API key (AIza... / AQ...)"
+            placeholderTextColor={colors.textMuted}
+            value={keyInput}
+            onChangeText={setKeyInput}
+            secureTextEntry={isSecure}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TouchableOpacity
+            style={styles.eyeBtn}
+            onPress={() => setIsSecure((prev) => !prev)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name={isSecure ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Action Buttons Row */}
+        <View style={styles.actionBtnRow}>
+          {keyInput.trim().length > 0 && (
+            <TouchableOpacity
+              style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
+              onPress={handleSaveCustomKey}
+              disabled={isSaving}
+              activeOpacity={0.8}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Ionicons name="save-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={[styles.btnTextWhite, { fontSize: scaleFont(11) }]}>Save Key</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.btnOutline, { borderColor: colors.border, backgroundColor: colors.background }]}
+            onPress={handleTestKey}
+            disabled={isTesting}
+            activeOpacity={0.8}
+          >
+            {isTesting ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Ionicons name="pulse-outline" size={14} color={colors.primary} style={{ marginRight: 4 }} />
+                <Text style={[styles.btnTextOutline, { color: colors.primary, fontSize: scaleFont(11) }]}>
+                  Test Key Live
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {hasCustomKey && (
+            <TouchableOpacity
+              style={[styles.btnReset, { backgroundColor: `${colors.textMuted}20` }]}
+              onPress={handleResetToEnv}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.btnResetText, { color: colors.textSecondary, fontSize: scaleFont(11) }]}>
+                Reset to .env
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* 2. Active Model Selection Cards */}
@@ -199,22 +396,22 @@ const styles = StyleSheet.create({
   container: {
     gap: 14,
   },
-  envKeyCard: {
+  keyConfigCard: {
     borderRadius: 16,
     padding: 16,
     borderWidth: 1.5,
   },
-  envKeyHeader: {
+  keyHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  envKeyBadge: {
+  keyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  envKeyBadgeText: {
+  keyBadgeText: {
     fontWeight: '800',
   },
   activeDot: {
@@ -222,8 +419,61 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  envKeyDesc: {
-    lineHeight: 18,
+  keyStatusText: {
+    marginBottom: 12,
+  },
+  inputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  keyInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingRight: 40,
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 12,
+  },
+  actionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  btnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  btnTextWhite: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  btnOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  btnTextOutline: {
+    fontWeight: '700',
+  },
+  btnReset: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  btnResetText: {
+    fontWeight: '600',
   },
   modelGrid: {
     gap: 10,

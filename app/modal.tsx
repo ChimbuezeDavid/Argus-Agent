@@ -105,7 +105,7 @@ export default function SettingsModal() {
     {
       id: 'ai',
       title: 'AI Engine & Models',
-      subtitle: `${settings.geminiModel || 'gemini-3.7-flash'} • API key active via .env`,
+      subtitle: `${settings.geminiModel || 'gemini-3.8-flash'} • API key & model settings`,
       icon: 'hardware-chip',
       iconColor: '#8b5cf6',
       badge: '3.7 & 3.8',
