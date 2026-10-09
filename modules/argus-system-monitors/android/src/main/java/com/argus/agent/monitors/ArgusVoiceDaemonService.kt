@@ -12,7 +12,13 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import kotlin.math.sqrt
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -73,6 +79,13 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
 
+    private var audioRecord: AudioRecord? = null
+    private var audioRecordThread: Thread? = null
+    @Volatile
+    private var isAudioRecordRunning = false
+    private var audioManager: AudioManager? = null
+    private var activeAudioFocusRequest: AudioFocusRequest? = null
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isRestarting = false
     private var isDestroyed = false
@@ -99,6 +112,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         }
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
         try {
             tts = TextToSpeech(this, this)
@@ -148,7 +162,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        startContinuousRecognizer()
+        startPassiveAudioRecordStream()
 
         // START_STICKY ensures Android OS resurrects the service if killed for memory
         return START_STICKY
@@ -241,118 +255,173 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         return builder.build()
     }
 
-    private fun startContinuousRecognizer() {
-        if (isDestroyed) return
+    private fun startPassiveAudioRecordStream() {
+        if (isDestroyed || isAudioRecordRunning) return
 
-        mainHandler.post {
-            try {
-                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                    Log.w(TAG, "RECORD_AUDIO permission not granted, pausing continuous recognizer")
-                    scheduleRecognizerRestart(3000)
-                    return@post
-                }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "RECORD_AUDIO permission not granted; passive listener paused")
+            return
+        }
 
-                if (speechRecognizer != null) {
-                    try {
-                        speechRecognizer?.cancel()
-                        speechRecognizer?.destroy()
-                    } catch (e: Exception) {}
-                    speechRecognizer = null
-                }
+        try {
+            val sampleRate = 16000
+            val channelConfig = AudioFormat.CHANNEL_IN_MONO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+            val bufferSize = maxOf(minBufferSize, 4096)
 
-                if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-                    Log.w(TAG, "Speech recognition not available on this device")
-                    return@post
-                }
+            // Strategy 1: VOICE_RECOGNITION signals HAL to apply acoustic echo cancellation
+            // and noise suppression without forcefully pre-empting ongoing media playback.
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize
+            )
 
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
-                    setRecognitionListener(object : RecognitionListener {
-                        private var consecutiveSilenceCount = 0
-
-                        override fun onReadyForSpeech(params: Bundle?) {}
-                        override fun onBeginningOfSpeech() {
-                            consecutiveSilenceCount = 0
-                        }
-                        override fun onRmsChanged(rmsdB: Float) {
-                            if (rmsdB > 4.5f) {
-                                consecutiveSilenceCount = 0
-                            }
-                        }
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() {
-                            consecutiveSilenceCount++
-                            val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 350L
-                            scheduleRecognizerRestart(adaptiveDelay)
-                        }
-                        override fun onError(error: Int) {
-                            Log.d(TAG, "SpeechRecognizer ambient error code: $error")
-                            consecutiveSilenceCount++
-                            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                                try {
-                                    speechRecognizer?.cancel()
-                                    speechRecognizer?.destroy()
-                                } catch (e: Exception) {}
-                                speechRecognizer = null
-                                scheduleRecognizerRestart(800)
-                            } else if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-                                updateNotification("Argus Voice Paused", "Microphone access requires Assistant permission")
-                                scheduleRecognizerRestart(3000)
-                            } else {
-                                val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 450L
-                                scheduleRecognizerRestart(adaptiveDelay)
-                            }
-                        }
-                        override fun onResults(results: Bundle?) {
-                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            val text = if (!matches.isNullOrEmpty()) matches[0] else ""
-                            if (text.isNotBlank()) {
-                                consecutiveSilenceCount = 0
-                                checkAndHandleWakeWord(text)
-                            } else {
-                                consecutiveSilenceCount++
-                            }
-                            val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 350L
-                            scheduleRecognizerRestart(adaptiveDelay)
-                        }
-                        override fun onPartialResults(partialResults: Bundle?) {
-                            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            val text = if (!matches.isNullOrEmpty()) matches[0] else ""
-                            if (text.isNotBlank()) {
-                                consecutiveSilenceCount = 0
-                                checkAndHandleWakeWord(text)
-                            }
-                        }
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
-                }
-
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
-                }
-
-                speechRecognizer?.startListening(intent)
-            } catch (e: Exception) {
-                Log.w(TAG, "Error starting speech recognizer: ${e.message}")
-                scheduleRecognizerRestart(1500)
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Log.w(TAG, "AudioRecord failed to initialize with VOICE_RECOGNITION")
+                return
             }
+
+            audioRecord?.startRecording()
+            isAudioRecordRunning = true
+            Log.i(TAG, "Passive continuous AudioRecord stream running (VOICE_RECOGNITION, zero audio focus)")
+
+            // Strategy 3: Single continuous stream on a dedicated background thread (no open/close churn)
+            audioRecordThread = Thread({
+                val audioBuffer = ShortArray(bufferSize / 2)
+                var consecutiveVoiceFrames = 0
+                var isTriggerHandled = false
+                var triggerCooldownUntil = 0L
+
+                while (isRunning && !isDestroyed && isAudioRecordRunning) {
+                    val readCount = audioRecord?.read(audioBuffer, 0, audioBuffer.size) ?: 0
+                    if (readCount > 0) {
+                        val now = System.currentTimeMillis()
+                        if (now < triggerCooldownUntil) {
+                            continue
+                        }
+
+                        // Compute RMS acoustic energy of the PCM chunk
+                        var sum = 0.0
+                        for (i in 0 until readCount) {
+                            val sample = audioBuffer[i].toDouble()
+                            sum += sample * sample
+                        }
+                        val rms = sqrt(sum / readCount)
+
+                        // Acoustic Voice Activity Detection (VAD)
+                        // Hardware AEC suppresses background music from phone speakers;
+                        // near-mic human vocal acoustics yield a distinct RMS envelope (> 650)
+                        if (rms > 650.0) {
+                            consecutiveVoiceFrames++
+                            if (consecutiveVoiceFrames >= 3 && !isTriggerHandled) {
+                                isTriggerHandled = true
+                                triggerCooldownUntil = now + 4000L
+                                consecutiveVoiceFrames = 0
+
+                                mainHandler.post {
+                                    handleAcousticHotwordTrigger()
+                                }
+                            }
+                        } else {
+                            if (consecutiveVoiceFrames > 0) {
+                                consecutiveVoiceFrames--
+                            }
+                            isTriggerHandled = false
+                        }
+                    }
+                }
+            }, "ArgusPassiveAudioThread").apply {
+                priority = Thread.NORM_PRIORITY
+                start()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start passive audio stream: ${e.message}")
         }
     }
 
-    private fun scheduleRecognizerRestart(delayMs: Long) {
-        if (isDestroyed || isRestarting) return
-        isRestarting = true
+    private fun stopPassiveAudioRecordStream() {
+        isAudioRecordRunning = false
+        try {
+            audioRecordThread?.interrupt()
+            audioRecordThread = null
+        } catch (e: Exception) {}
 
-        mainHandler.postDelayed({
-            isRestarting = false
-            if (!isDestroyed && isRunning) {
-                startContinuousRecognizer()
+        try {
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                audioRecord?.stop()
             }
-        }, delayMs)
+            audioRecord?.release()
+            audioRecord = null
+        } catch (e: Exception) {}
     }
+
+    // Strategy 2: Request transient focus with ducking ONLY during active interaction
+    private fun requestActiveInteractionAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build()
+                    )
+                    .setOnAudioFocusChangeListener { /* handle changes */ }
+                    .build()
+                activeAudioFocusRequest = focusRequest
+                audioManager?.requestAudioFocus(focusRequest)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to request interaction audio focus: ${e.message}")
+        }
+    }
+
+    private fun abandonInteractionAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                activeAudioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+                activeAudioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(null)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to abandon interaction audio focus: ${e.message}")
+        }
+    }
+
+    private fun handleAcousticHotwordTrigger() {
+        Log.i(TAG, "Acoustic hotword/voice trigger activated!")
+        triggerHapticAlert()
+
+        // Softly duck running Spotify/VLC music to 20%
+        requestActiveInteractionAudioFocus()
+
+        // 1. Launch lightweight Ella transparent overlay session directly over active app
+        val overlayTriggered = EllaVoiceInteractionService.triggerOverlaySession("")
+        if (!overlayTriggered) {
+            // Fallback to floating capsule overlay
+            showBixbyFloatingCapsule("I'm listening...")
+            wakeUpAndExecute("")
+        }
+
+        // Release audio ducking after interaction window completes
+        mainHandler.postDelayed({
+            abandonInteractionAudioFocus()
+        }, 5000L)
+    }
+
 
     private fun checkAndHandleWakeWord(transcript: String) {
         if (transcript.isBlank()) return
@@ -683,6 +752,8 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {}
 
         mainHandler.removeCallbacksAndMessages(null)
+        stopPassiveAudioRecordStream()
+        abandonInteractionAudioFocus()
         removeFloatingCapsule()
         releaseWakeLock()
 
