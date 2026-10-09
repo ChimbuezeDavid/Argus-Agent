@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioFormat
@@ -663,7 +664,9 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
         // Reschedule restart via AlarmManager as self-healing insurance policy
         scheduleServiceRestart()
-        scheduleRecognizerRestart(300)
+        if (!isAudioRecordRunning && !isDestroyed) {
+            startPassiveAudioRecordStream()
+        }
     }
 
     private fun scheduleServiceRestart() {
