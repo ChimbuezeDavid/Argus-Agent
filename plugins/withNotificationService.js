@@ -1,11 +1,41 @@
-const { withAndroidManifest } = require('@expo/config-plugins');
+const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * Expo Config Plugin to inject the Notification Listener Service
  * and Accessibility RPA Service directly into AndroidManifest.xml.
  */
 function withNotificationService(config) {
+  config = withDangerousMod(config, [
+    'android',
+    async (config) => {
+      const resXmlDir = path.join(
+        config.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'res',
+        'xml'
+      );
+      if (!fs.existsSync(resXmlDir)) {
+        fs.mkdirSync(resXmlDir, { recursive: true });
+      }
+      const ellaXmlPath = path.join(resXmlDir, 'ella_voice_interaction_service.xml');
+      const xmlContent = `<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.argus.agent.monitors.EllaVoiceInteractionSessionService"
+    android:recognitionService="com.argus.agent.monitors.ArgusVoiceDaemonService"
+    android:supportsAssist="true"
+    android:supportsLocalInteraction="true" />
+`;
+      fs.writeFileSync(ellaXmlPath, xmlContent, 'utf8');
+      return config;
+    },
+  ]);
+
   return withAndroidManifest(config, async (config) => {
+
     let androidManifest = config.modResults;
     let mainApplication = androidManifest.manifest.application[0];
 
