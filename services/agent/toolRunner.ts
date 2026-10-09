@@ -1,5 +1,6 @@
 // Executor that maps agent function calls to local database and phone actions
 import * as notesRepo from '../database/notesRepo';
+import * as plansRepo from '../database/plansRepo';
 import * as expensesRepo from '../database/expensesRepo';
 import * as budgetRepo from '../database/budgetRepo';
 import * as phoneActions from '../actions/phoneActions';
@@ -192,8 +193,79 @@ export async function executeTool(name: string, args: any): Promise<any> {
         const appTarget = args?.package_name || args?.app_name || args?.package || args?.name || args?.app || (typeof args === 'string' ? args : '');
         return await phoneActions.openApp(appTarget);
         
+      // --- Plans & Schedule Tools ---
+      case 'create_plan': {
+        const createdPlan = await plansRepo.createPlan({
+          title: args.title,
+          description: args.description,
+          due_date: args.due_date,
+          due_time: args.due_time,
+          priority: args.priority,
+          category: args.category,
+          plan_type: args.plan_type,
+          days_duration: args.days_duration,
+        });
+        return {
+          success: true,
+          action: 'create_plan',
+          plan: createdPlan,
+          message: `Plan "${createdPlan.title}" created successfully (ID #${createdPlan.id}).`,
+        };
+      }
+
+      case 'list_plans': {
+        const plans = await plansRepo.listPlans(args.status);
+        return {
+          success: true,
+          count: plans.length,
+          plans,
+          message: plans.length > 0
+            ? `Found ${plans.length} plan(s): ${plans.map((p) => `[#${p.id}] ${p.title} (${p.status})`).join(', ')}`
+            : 'No plans found matching your criteria.',
+        };
+      }
+
+      case 'update_plan': {
+        await plansRepo.updatePlan(args.id, {
+          title: args.title,
+          description: args.description,
+          due_date: args.due_date,
+          due_time: args.due_time,
+          priority: args.priority,
+          status: args.status,
+          category: args.category,
+        });
+        return {
+          success: true,
+          action: 'update_plan',
+          id: args.id,
+          message: `Plan #${args.id} updated successfully.`,
+        };
+      }
+
+      case 'toggle_plan_status': {
+        await plansRepo.togglePlanStatus(args.id, args.current_status || 'pending');
+        return {
+          success: true,
+          action: 'toggle_plan_status',
+          id: args.id,
+          message: `Plan #${args.id} status toggled successfully.`,
+        };
+      }
+
+      case 'delete_plan': {
+        await plansRepo.deletePlan(args.id);
+        return {
+          success: true,
+          action: 'delete_plan',
+          id: args.id,
+          message: `Plan #${args.id} permanently removed.`,
+        };
+      }
+
+      // Backward compatibility alias for place_call -> make_phone_call
       case 'place_call':
-        return await phoneActions.placeCall(args.phone_number);
+        return await phoneActions.placeCall(args.phone_number || args.target);
         
       // --- Geofencing Tools ---
       case 'create_geofence':

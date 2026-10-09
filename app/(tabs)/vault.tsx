@@ -8,14 +8,16 @@ import { useFocusEffect } from 'expo-router';
 import { useHCITheme } from '@/hooks/useHCITheme';
 
 import PlanTab from '@/components/vault/PlanTab';
+import NotesTab from '@/components/vault/NotesTab';
 import TelemetryTab from '@/components/vault/TelemetryTab';
 import GeofencesTab from '@/components/vault/GeofencesTab';
 import { MaterialTopBar, NavigationDrawer, ContextualTabBar, TabItem } from '@/components/navigation';
 
-type VaultLens = 'plan' | 'telemetry' | 'geofences';
+type VaultLens = 'plan' | 'notes' | 'geofences' | 'telemetry';
 
 const VAULT_TABS: TabItem[] = [
   { key: 'plan', label: 'Plan', icon: 'checkbox-outline' },
+  { key: 'notes', label: 'Notes', icon: 'document-text-outline' },
   { key: 'geofences', label: 'Geofences', icon: 'location-outline' },
   { key: 'telemetry', label: 'Screen Time', icon: 'hardware-chip-outline' },
 ];
@@ -39,18 +41,32 @@ export default function VaultScreen() {
     }, [])
   );
 
+  const getSubtitle = () => {
+    switch (activeLens) {
+      case 'plan':
+        return 'Executive Schedule & Tasks';
+      case 'notes':
+        return 'Knowledge Vault & Drafts';
+      case 'geofences':
+        return 'Active Geofence Boundaries';
+      case 'telemetry':
+        return 'App Usage & Screen Time';
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* 1. Material Top Bar with Hamburger Menu */}
       <MaterialTopBar
         title="Vault"
-        subtitle={activeLens === 'plan' ? 'Executive Schedule & Tasks' : activeLens === 'geofences' ? 'Active Geofence Boundaries' : 'App Usage & Screen Time'}
+        subtitle={getSubtitle()}
         onOpenDrawer={() => setDrawerVisible(true)}
       />
 
       {/* 2. Active Tab Content Surface */}
       <View style={styles.contentBox}>
         {activeLens === 'plan' && <PlanTab refreshSignal={refreshSignal} />}
+        {activeLens === 'notes' && <NotesTab refreshSignal={refreshSignal} />}
         {activeLens === 'telemetry' && <TelemetryTab refreshSignal={refreshSignal} />}
         {activeLens === 'geofences' && <GeofencesTab refreshSignal={refreshSignal} />}
       </View>
@@ -75,44 +91,6 @@ export default function VaultScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  topHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-  },
-  topHeaderTitle: {
-    fontWeight: '800',
-  },
-  settingsCircleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: 'transparent',
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    gap: 8,
-  },
-  segmentButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  segmentActive: {},
-  segmentText: {
-    fontWeight: '700',
   },
   contentBox: {
     flex: 1,

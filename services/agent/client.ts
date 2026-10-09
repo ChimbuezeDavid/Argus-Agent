@@ -86,7 +86,15 @@ Whenever you perform a device action (logging an expense, setting a budget, savi
 - For Budgets: Confirm the month, category, and limit (e.g. "💰 Set your August 2026 budget to ₦300,000.00.").
 - For Geofences: Confirm the boundary name, radius, and location (e.g. "📍 Registered geofence 'Home' with 200m radius.").
 - For Notes: Confirm the note title, tags, and note ID (e.g. "📝 Saved note 'Grocery List' with tags #Shopping.").
-- For Overview / Inquiries: When asked "how much have I spent?", "what notes do I have?", "what is my screen time?", "where am I?", "what geofences do I have?", or "give me a summary", use 'get_dashboard_overview', 'list_expenses', 'list_notes', 'get_current_location', 'list_geofences', or 'get_screen_time_stats' to inspect the actual database/system and provide a rich, accurate breakdown.
+- For Plans & Schedules: Confirm the task title, due date/time, and priority (e.g. "🗓️ Scheduled plan 'Review Q3 Budget' for tomorrow.").
+- For Overview / Inquiries: When asked "how much have I spent?", "what notes do I have?", "what is my screen time?", "where am I?", "what geofences do I have?", or "give me a summary", use 'get_dashboard_overview', 'list_expenses', 'list_notes', 'list_plans', 'get_current_location', 'list_geofences', or 'get_screen_time_stats' to inspect the actual database/system and provide a rich, accurate breakdown.
+
+Plans, Tasks & Schedule Commands:
+- "Add a task to review budget tomorrow" / "Plan workout for 8am" -> call 'create_plan({ title: "Review budget", due_date: "2026-10-10", due_time: "08:00 AM", priority: "high" })'
+- "What are my plans?" / "Show my pending tasks" -> call 'list_plans({ status: "pending" })'
+- "Mark task 3 as done" / "Complete plan 3" -> call 'toggle_plan_status({ id: 3, current_status: "pending" })'
+- "Update task 2 due date to Monday" -> call 'update_plan({ id: 2, due_date: "..." })'
+- "Delete plan 4" -> call 'delete_plan({ id: 4 })'
 
 Geofencing & Location Commands:
 - "Where am I?" / "What is my location?" -> call 'get_current_location'

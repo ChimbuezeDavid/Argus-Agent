@@ -186,18 +186,134 @@ export const AGENT_TOOLS = [
       required: ['package_name']
     }
   },
+  // --- Plans & Schedule Tools ---
   {
-    name: 'place_call',
-    description: 'Places a phone call to a specified phone number directly from the dialer.',
+    name: 'create_plan',
+    description: 'Creates a new plan, task, or daily schedule/routine in the SQLite database.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        phone_number: {
+        title: {
           type: 'STRING',
-          description: 'The recipient\'s phone number (e.g., "+15550199", "911", "07xxxxxxxx")'
+          description: 'The title or objective of the plan or task (e.g. "Review quarterly budget", "Morning workout routine")'
+        },
+        description: {
+          type: 'STRING',
+          description: 'Optional detailed description or steps of the plan'
+        },
+        due_date: {
+          type: 'STRING',
+          description: 'Optional due date in YYYY-MM-DD format (e.g. "2026-10-10")'
+        },
+        due_time: {
+          type: 'STRING',
+          description: 'Optional due time (e.g. "09:00 AM", "14:30")'
+        },
+        priority: {
+          type: 'STRING',
+          description: 'Priority level: "urgent", "high", "normal", or "low". Defaults to "normal".'
+        },
+        category: {
+          type: 'STRING',
+          description: 'Category tag (e.g. "task", "work", "fitness", "finance", "routine")'
+        },
+        plan_type: {
+          type: 'STRING',
+          description: 'Type of plan: "task" for standalone tasks or "schedule" for multi-day routines'
+        },
+        days_duration: {
+          type: 'NUMBER',
+          description: 'Duration in days (1 to 7) for schedule routines'
         }
       },
-      required: ['phone_number']
+      required: ['title']
+    }
+  },
+  {
+    name: 'list_plans',
+    description: 'Lists all stored plans, tasks, and routines from the local database with optional status filtering.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        status: {
+          type: 'STRING',
+          description: 'Optional status filter: "pending" or "completed". If omitted, returns all plans.'
+        }
+      }
+    }
+  },
+  {
+    name: 'update_plan',
+    description: 'Updates properties of an existing plan or task in the database.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        id: {
+          type: 'NUMBER',
+          description: 'The numeric ID of the plan to update'
+        },
+        title: {
+          type: 'STRING',
+          description: 'Optional new title'
+        },
+        description: {
+          type: 'STRING',
+          description: 'Optional updated description'
+        },
+        due_date: {
+          type: 'STRING',
+          description: 'Optional updated due date (YYYY-MM-DD)'
+        },
+        due_time: {
+          type: 'STRING',
+          description: 'Optional updated due time'
+        },
+        priority: {
+          type: 'STRING',
+          description: 'Optional updated priority ("urgent", "high", "normal", "low")'
+        },
+        status: {
+          type: 'STRING',
+          description: 'Optional updated status ("pending", "completed")'
+        },
+        category: {
+          type: 'STRING',
+          description: 'Optional updated category'
+        }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'toggle_plan_status',
+    description: 'Toggles a plan or task status between pending and completed.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        id: {
+          type: 'NUMBER',
+          description: 'The numeric ID of the plan to toggle'
+        },
+        current_status: {
+          type: 'STRING',
+          description: 'The current status ("pending" or "completed"). If unsure, pass "pending".'
+        }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'delete_plan',
+    description: 'Permanently deletes a plan or task by its numeric ID.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        id: {
+          type: 'NUMBER',
+          description: 'The numeric ID of the plan to delete'
+        }
+      },
+      required: ['id']
     }
   },
   {

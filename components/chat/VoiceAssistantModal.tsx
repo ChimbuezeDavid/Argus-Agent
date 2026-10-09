@@ -10,6 +10,7 @@ import {
   PermissionsAndroid,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as voiceService from '@/services/voice/voiceService';
@@ -36,6 +37,7 @@ export function VoiceAssistantModal({
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Listening... Speak now');
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
 
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -52,6 +54,7 @@ export function VoiceAssistantModal({
       startRecording();
     } else {
       stopRecording();
+      setMicPermissionDenied(false);
     }
     return () => {
       clearAllTimers();
@@ -106,9 +109,11 @@ export function VoiceAssistantModal({
     const hasPermission = await requestMicPermission();
     if (!hasPermission) {
       setIsRecording(false);
+      setMicPermissionDenied(true);
       setStatusMessage('Microphone permission required');
       return;
     }
+    setMicPermissionDenied(false);
 
     try {
       const res = await voiceService.startHardwareAudioCapture();
@@ -349,6 +354,21 @@ export function VoiceAssistantModal({
                     ? 'Speak clearly, then tap the Red Stop button when finished.'
                     : 'Tap the microphone to speak your command.'}
                 </Text>
+
+                {micPermissionDenied && (
+                  <TouchableOpacity
+                    style={[styles.permissionBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => Linking.openSettings()}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open App Settings to grant microphone permission"
+                  >
+                    <Ionicons name="settings-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={[styles.permissionBtnText, { fontSize: scaleFont(13) }]}>
+                      Open App Settings
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {/* Control Buttons */}
@@ -487,6 +507,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   submitBtnText: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  permissionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  permissionBtnText: {
     color: '#ffffff',
     fontWeight: '700',
   },
