@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { AGENT_TOOLS } from './definitions';
 import { executeTool } from './toolRunner';
 import { listActiveLearnedRules } from '../database/learnedRulesRepo';
+import { contextVaultRepo } from '../database/contextVaultRepo';
 
 export interface AgentConversationResult {
   content: string;
@@ -353,10 +354,15 @@ export async function runAgentConversation(
   let activeModelName = '';
 
   const learnedRules = await listActiveLearnedRules().catch(() => []);
+  const vaultFacts = await contextVaultRepo.getAllFacts().catch(() => []);
   let dynamicSystemInstruction = SYSTEM_INSTRUCTION;
   if (learnedRules.length > 0) {
     const rulesList = learnedRules.map((r, i) => `${i + 1}. ${r.rule_text}`).join('\n');
     dynamicSystemInstruction += `\n\nUSER CUSTOM PREFERENCES & LEARNED RULES (MANDATORY):\nYou must strictly adhere to these customized rules the user has taught you:\n${rulesList}\n`;
+  }
+  if (vaultFacts.length > 0) {
+    const factsList = vaultFacts.slice(0, 8).map((f) => `[${f.category.toUpperCase()}] ${f.key}: ${f.value}`).join('\n');
+    dynamicSystemInstruction += `\n\nSECURE LOCAL CONTEXT VAULT (USER MEMORY):\nPersistent user preferences and routines stored on-device:\n${factsList}\n`;
   }
 
   // 2. Initialize chat session with transparent model failover

@@ -267,15 +267,26 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
 
                 speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
                     setRecognitionListener(object : RecognitionListener {
+                        private var consecutiveSilenceCount = 0
+
                         override fun onReadyForSpeech(params: Bundle?) {}
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBeginningOfSpeech() {
+                            consecutiveSilenceCount = 0
+                        }
+                        override fun onRmsChanged(rmsdB: Float) {
+                            if (rmsdB > 4.5f) {
+                                consecutiveSilenceCount = 0
+                            }
+                        }
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() {
-                            scheduleRecognizerRestart(350)
+                            consecutiveSilenceCount++
+                            val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 350L
+                            scheduleRecognizerRestart(adaptiveDelay)
                         }
                         override fun onError(error: Int) {
                             Log.d(TAG, "SpeechRecognizer ambient error code: $error")
+                            consecutiveSilenceCount++
                             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
                                 try {
                                     speechRecognizer?.cancel()
@@ -287,19 +298,29 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
                                 updateNotification("Argus Voice Paused", "Microphone access requires Assistant permission")
                                 scheduleRecognizerRestart(3000)
                             } else {
-                                scheduleRecognizerRestart(450)
+                                val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 450L
+                                scheduleRecognizerRestart(adaptiveDelay)
                             }
                         }
                         override fun onResults(results: Bundle?) {
                             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             val text = if (!matches.isNullOrEmpty()) matches[0] else ""
-                            checkAndHandleWakeWord(text)
-                            scheduleRecognizerRestart(350)
+                            if (text.isNotBlank()) {
+                                consecutiveSilenceCount = 0
+                                checkAndHandleWakeWord(text)
+                            } else {
+                                consecutiveSilenceCount++
+                            }
+                            val adaptiveDelay = if (consecutiveSilenceCount > 6) 1200L else 350L
+                            scheduleRecognizerRestart(adaptiveDelay)
                         }
                         override fun onPartialResults(partialResults: Bundle?) {
                             val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             val text = if (!matches.isNullOrEmpty()) matches[0] else ""
-                            checkAndHandleWakeWord(text)
+                            if (text.isNotBlank()) {
+                                consecutiveSilenceCount = 0
+                                checkAndHandleWakeWord(text)
+                            }
                         }
                         override fun onEvent(eventType: Int, params: Bundle?) {}
                     })

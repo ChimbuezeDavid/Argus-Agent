@@ -60,6 +60,11 @@ async function runAutoMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     } catch (colErr) {
       console.warn('[SQLite AutoMigration] Column check error:', colErr);
     }
+    // 4. Ensure Context Vault has default memories populated
+    try {
+      const { contextVaultRepo } = require('./contextVaultRepo');
+      await contextVaultRepo.seedDefaultsIfEmpty();
+    } catch (e) {}
   } catch (err) {
     console.warn('[SQLite AutoMigration] Non-fatal migration warning:', err);
   }

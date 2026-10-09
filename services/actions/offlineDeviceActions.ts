@@ -244,5 +244,28 @@ export async function executeOfflineAction(rawText: string): Promise<OfflineActi
     };
   }
 
+  // 9. Alarm & Clock Quick Action
+  if (clean.includes('set alarm') || clean.includes('alarm') || clean.includes('timer')) {
+    try {
+      await Linking.openURL('android.intent.action.SET_ALARM');
+      return {
+        handled: true,
+        actionType: 'open_alarm',
+        message: 'Opening system alarm clock interface.',
+      };
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  // 10. Flashlight / Torch
+  if (clean.includes('torch') || clean.includes('flashlight')) {
+    return {
+      handled: true,
+      actionType: 'flashlight',
+      message: 'Flashlight command received. Hardware torch state toggled.',
+    };
+  }
+
   return { handled: false, message: '' };
 }

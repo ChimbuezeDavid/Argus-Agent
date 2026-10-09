@@ -1,19 +1,27 @@
 package com.argus.agent.monitors
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.hardware.camera2.CameraManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.AlarmClock
+import android.provider.Settings
 import android.service.voice.VoiceInteractionSession
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -29,6 +37,12 @@ import java.util.Locale
  * EllaVoiceInteractionSession: Manages the lightweight Bixby-style transparent
  * overlay window that appears directly over whatever app the user is currently on,
  * without bringing the main activity to the foreground or destroying their screen context.
+ *
+ * Enhanced with:
+ * 1. Transient Audio Focus & Ducking (AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+ * 2. Active Barge-In Interruption Detection (aborts TTS immediately when user speaks)
+ * 3. Multimodal Screen Awareness & Accessibility RPA Vision
+ * 4. Deterministic Local Fallback (Calls, Alarms, Bluetooth, Flashlight, DND, Macros)
  */
 class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(context), TextToSpeech.OnInitListener {
 
@@ -40,6 +54,10 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
     private var speechRecognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var isSpeaking = false
+
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
 
     private lateinit var rootContainer: FrameLayout
     private lateinit var capsuleCard: LinearLayout
@@ -51,9 +69,10 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
     override fun onCreate() {
         super.onCreate()
         try {
+            audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             tts = TextToSpeech(context, this)
         } catch (e: Exception) {
-            Log.w(TAG, "TTS initialization failed: ${e.message}")
+            Log.w(TAG, "Initialization failed: ${e.message}")
         }
     }
 
@@ -63,6 +82,18 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             tts?.language = Locale.US
             tts?.setPitch(1.05f)
             tts?.setSpeechRate(1.05f)
+
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    isSpeaking = true
+                }
+                override fun onDone(utteranceId: String?) {
+                    isSpeaking = false
+                }
+                override fun onError(utteranceId: String?) {
+                    isSpeaking = false
+                }
+            })
         }
     }
 
@@ -226,9 +257,12 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
         super.onShow(args, showFlags)
         Log.i(TAG, "Ella Voice Overlay Session Shown")
 
+        // 1. Intelligent Audio Ducking: lowers background Spotify/YouTube volume
+        requestAudioDucking()
+
         // Reset UI text
         transcriptView.text = "Listening..."
-        responseView.text = "Speak a command (e.g., 'play music on VLC', 'open WhatsApp')."
+        responseView.text = "Speak a command (e.g. 'read screen', 'prepare for meeting', 'reply with ETA')."
         statusBadge.text = "⚡ Ella • Hybrid Assistant"
 
         val initialCommand = args?.getString("wake_word_command") ?: ""
@@ -237,6 +271,48 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             handleCommand(initialCommand)
         } else {
             startOverlayListening()
+        }
+    }
+
+    private fun requestAudioDucking() {
+        try {
+            if (audioManager == null) {
+                audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val playbackAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(playbackAttributes)
+                    .setAcceptsDelayedFocusGain(false)
+                    .build()
+                audioFocusRequest?.let { audioManager?.requestAudioFocus(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to request audio ducking: ${e.message}")
+        }
+    }
+
+    private fun abandonAudioDucking() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+                audioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(null)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to abandon audio ducking: ${e.message}")
         }
     }
 
@@ -255,8 +331,23 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
                     }
                     override fun onBeginningOfSpeech() {
                         transcriptView.text = "Hearing your voice..."
+                        // Active Barge-In: if user interrupts Ella while speaking, stop TTS immediately!
+                        if (isSpeaking) {
+                            Log.i(TAG, "Active Barge-in detected: cutting off TTS playback")
+                            tts?.stop()
+                            isSpeaking = false
+                            statusBadge.text = "⚡ Ella • Interrupted by you"
+                        }
                     }
-                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onRmsChanged(rmsdB: Float) {
+                        // Acoustic energy barge-in trigger
+                        if (isSpeaking && rmsdB > 8.5f) {
+                            Log.i(TAG, "RMS energy barge-in trigger: ($rmsdB dB)")
+                            tts?.stop()
+                            isSpeaking = false
+                            statusBadge.text = "⚡ Ella • Listening..."
+                        }
+                    }
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         transcriptView.text = "Processing..."
@@ -316,7 +407,151 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             return
         }
 
-        // 2. Open App ("open whatsapp", "open chrome", "launch camera")
+        // 2. Multimodal Screen Vision ("what's on my screen", "read screen", "summarize screen")
+        if (clean.contains("on my screen") || clean.contains("read screen") || clean.contains("summarize screen") || clean.contains("what am i looking at") || clean.contains("read active screen")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Screen Vision (${latency}ms)"
+
+            val accessibility = ArgusAccessibilityService.instance
+            if (accessibility == null) {
+                responseView.text = "Argus Accessibility Service is inactive. Enable in Settings > Hardware."
+                speak("Accessibility service is needed to read your screen.")
+                dismissDelayed(3500)
+                return
+            }
+
+            val nodes = accessibility.inspectScreenNodes()
+            val activePkg = accessibility.currentPackageName
+            val visibleTexts = nodes.mapNotNull { it["text"] as? String }.filter { it.isNotBlank() && it.length > 2 }
+
+            if (visibleTexts.isEmpty()) {
+                responseView.text = "Inspected screen ($activePkg). No readable text elements detected."
+                speak("I checked your screen, but no readable text was found.")
+            } else {
+                val preview = visibleTexts.take(8).joinToString(" • ")
+                responseView.text = "Active app: ${activePkg.substringAfterLast('.')}\n$preview"
+                speak("You are viewing ${activePkg.substringAfterLast('.')}. Content includes: " + visibleTexts.take(3).joinToString(". "))
+            }
+            dismissDelayed(5000)
+            return
+        }
+
+        // 3. Screen Action RPA: "reply to this message with my eta", "reply with my eta"
+        if (clean.contains("reply") && clean.contains("eta")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Screen RPA (${latency}ms)"
+
+            val accessibility = ArgusAccessibilityService.instance
+            if (accessibility == null) {
+                responseView.text = "Argus Accessibility Service is needed to type replies."
+                speak("Accessibility service is required to reply.")
+                dismissDelayed(3000)
+                return
+            }
+
+            val etaText = "On my way! My ETA is approximately 15 minutes."
+            val typed = accessibility.inputText(etaText)
+            if (typed) {
+                accessibility.clickByText("Send", false)
+                responseView.text = "Drafted and sent ETA: \"$etaText\""
+                speak("Replied to message with your ETA.")
+            } else {
+                responseView.text = "Could not locate an active message text box on screen."
+                speak("Couldn't find an open reply field.")
+            }
+            dismissDelayed(3000)
+            return
+        }
+
+        // 4. Action Macro: "prepare for my meeting" / "meeting mode"
+        if (clean.contains("prepare for my meeting") || clean.contains("meeting mode") || clean.contains("meeting prep")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Action Macro (${latency}ms)"
+            responseView.text = "Macro: Enabling DND, opening meeting notes, launching calendar..."
+            speak("Preparing for your meeting. Enabling priority mode and opening agenda.")
+
+            try {
+                // Set DND / Priority filter
+                val notifManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notifManager?.isNotificationPolicyAccessGranted == true) {
+                    notifManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                }
+            } catch (e: Exception) {}
+
+            // Launch Argus or Calendar
+            val calendarIntent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse("content://com.android.calendar/time/")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(calendarIntent)
+            } catch (e: Exception) {
+                launchPackage(context.packageName)
+            }
+            dismissDelayed(3000)
+            return
+        }
+
+        // 5. Action Macro: "commute mode" / "navigate home"
+        if (clean.contains("commute mode") || clean.contains("heading home") || clean.contains("navigate home")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Action Macro (${latency}ms)"
+            responseView.text = "Macro: Starting evening playlist, launching navigation..."
+            speak("Commute mode activated. Starting media and navigation.")
+
+            launchPackage("org.videolan.vlc")
+            val navIntent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse("geo:0,0?q=Home")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(navIntent)
+            } catch (e: Exception) {}
+            dismissDelayed(3000)
+            return
+        }
+
+        // 6. Flashlight / Torch
+        if (clean.contains("flashlight") || clean.contains("torch")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Local (${latency}ms)"
+            try {
+                val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+                val cameraId = cameraManager?.cameraIdList?.firstOrNull()
+                if (cameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val turnOn = !clean.contains("off")
+                    cameraManager.setTorchMode(cameraId, turnOn)
+                    responseView.text = if (turnOn) "Flashlight turned on." else "Flashlight turned off."
+                    speak(responseView.text.toString())
+                }
+            } catch (e: Exception) {
+                responseView.text = "Flashlight control unavailable."
+            }
+            dismissDelayed(2000)
+            return
+        }
+
+        // 7. Alarm / Timer
+        if (clean.contains("set alarm") || clean.contains("wake me up") || clean.contains("set timer")) {
+            val latency = System.currentTimeMillis() - startTime
+            statusBadge.text = "⚡ Ella Local (${latency}ms)"
+            try {
+                val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                    putExtra(AlarmClock.EXTRA_MESSAGE, "Argus Alarm")
+                    putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(alarmIntent)
+                responseView.text = "Opening alarm clock..."
+                speak("Opening alarm settings.")
+            } catch (e: Exception) {
+                responseView.text = "Could not open alarm manager."
+            }
+            dismissDelayed(2000)
+            return
+        }
+
+        // 8. Open App ("open whatsapp", "open chrome", "launch camera")
         val openMatch = Regex("^(?:open|launch|start|go to)\\s+([a-z0-9_\\s]+)$").find(clean)
         if (openMatch != null) {
             val appTarget = openMatch.groupValues[1].trim()
@@ -339,7 +574,7 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             return
         }
 
-        // 3. Phone Call ("call mom", "dial 080...")
+        // 9. Phone Call ("call mom", "dial 080...")
         val callMatch = Regex("^(?:call|dial|phone)\\s+(?:to\\s+)?([a-z0-9_\\s+]+)$").find(clean)
         if (callMatch != null) {
             val numberOrName = callMatch.groupValues[1].trim()
@@ -364,7 +599,7 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             return
         }
 
-        // 4. Hardware Audio Recording
+        // 10. Hardware Audio Recording
         if (clean.contains("record audio") || clean.contains("start recording") || clean.contains("help me record")) {
             val latency = System.currentTimeMillis() - startTime
             statusBadge.text = "⚡ Ella Local (${latency}ms)"
@@ -374,7 +609,7 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
             return
         }
 
-        // 5. Cloud Intelligence / Gemini Delegation
+        // 11. Cloud Intelligence / Gemini Delegation
         statusBadge.text = "☁️ Gemini Cloud Orchestration"
         responseView.text = "Delegating to Gemini API for reasoning..."
 
@@ -415,6 +650,7 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
 
     override fun onHide() {
         super.onHide()
+        abandonAudioDucking()
         try {
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()
@@ -424,6 +660,7 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
 
     override fun onDestroy() {
         super.onDestroy()
+        abandonAudioDucking()
         try {
             tts?.stop()
             tts?.shutdown()
@@ -431,3 +668,4 @@ class EllaVoiceInteractionSession(context: Context) : VoiceInteractionSession(co
         } catch (e: Exception) {}
     }
 }
+

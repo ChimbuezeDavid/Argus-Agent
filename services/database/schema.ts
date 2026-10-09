@@ -155,6 +155,18 @@ CREATE TABLE IF NOT EXISTS plans (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 14. Secure Local Context Vault (Preferences, Long-term Facts, Macros & Entities)
+CREATE TABLE IF NOT EXISTS context_vault (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category TEXT NOT NULL, -- 'preference', 'routine', 'entity', 'fact', 'macro'
+  key TEXT NOT NULL UNIQUE,
+  value TEXT NOT NULL,
+  confidence REAL DEFAULT 1.0,
+  reference_count INTEGER DEFAULT 1,
+  last_accessed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Default Settings Insertions
 INSERT OR IGNORE INTO settings (key, value) VALUES ('gemini_model', 'gemini-3.7-flash');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('primary_currency', 'NGN');
