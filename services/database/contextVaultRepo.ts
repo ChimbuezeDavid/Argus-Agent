@@ -1,4 +1,5 @@
 import { getDatabase } from './db';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
 export interface ContextVaultItem {
   id: number;
@@ -143,9 +144,9 @@ export const contextVaultRepo = {
   /**
    * Seeds foundational default user routines & preferences if empty.
    */
-  async seedDefaultsIfEmpty(): Promise<void> {
+  async seedDefaultsIfEmpty(dbParam?: SQLiteDatabase): Promise<void> {
     try {
-      const db = await getDatabase();
+      const db = dbParam || (await getDatabase());
       const count = await db.getFirstAsync<{ count: number }>(
         'SELECT COUNT(*) as count FROM context_vault'
       );
@@ -175,7 +176,17 @@ export const contextVaultRepo = {
       ];
 
       for (const item of defaults) {
-        await this.storeFact(item.category, item.key, item.value);
+        await db.runAsync(
+          `INSERT INTO context_vault (category, key, value, confidence, reference_count, last_accessed_at)
+           VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+           ON CONFLICT(key) DO UPDATE SET
+             value = excluded.value,
+             category = excluded.category,
+             confidence = excluded.confidence,
+             reference_count = reference_count + 1,
+             last_accessed_at = CURRENT_TIMESTAMP`,
+          [item.category, item.key.trim().toLowerCase(), item.value.trim(), 1.0]
+        );
       }
     } catch (e) {
       console.warn('Failed to seed context vault defaults:', e);

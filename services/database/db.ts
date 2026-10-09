@@ -63,8 +63,10 @@ async function runAutoMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     // 4. Ensure Context Vault has default memories populated
     try {
       const { contextVaultRepo } = require('./contextVaultRepo');
-      await contextVaultRepo.seedDefaultsIfEmpty();
-    } catch (e) {}
+      await contextVaultRepo.seedDefaultsIfEmpty(db);
+    } catch (e) {
+      console.warn('[SQLite AutoMigration] Non-fatal default seed warning:', e);
+    }
   } catch (err) {
     console.warn('[SQLite AutoMigration] Non-fatal migration warning:', err);
   }
@@ -85,10 +87,12 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
           const db = await SQLite.openDatabaseAsync('argus.db');
-          await runAutoMigrations(db);
+          // Assign instance immediately so re-entrant calls within migrations resolve without deadlock
           databaseInstance = db;
+          await runAutoMigrations(db);
           return db;
         } catch (err) {
+          databaseInstance = null;
           lastErr = err;
           console.warn(`[SQLite] Initialization attempt ${attempt} failed:`, err);
           if (attempt < 4) {
@@ -111,7 +115,7 @@ export async function saveSetting(key: string, value: string): Promise<boolean> 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const db = await getDatabase();
-      await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', key, value);
+      await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
       return true;
     } catch (err) {
       if (attempt === 3) {
@@ -129,8 +133,7 @@ export async function saveSetting(key: string, value: string): Promise<boolean> 
  */
 export async function initializeDatabase(): Promise<void> {
   try {
-    const db = await getDatabase();
-    await runAutoMigrations(db);
+    await getDatabase();
     console.log('[SQLite] Database schema verified and migrated successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

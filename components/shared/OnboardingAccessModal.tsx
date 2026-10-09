@@ -160,12 +160,28 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
     }
   };
 
+  const handleDismiss = async () => {
+    triggerHaptic('selection');
+    try {
+      await settings.completeOnboarding();
+    } catch (e) {
+      console.warn('[OnboardingAccessModal] completeOnboarding warning:', e);
+    }
+    onComplete();
+  };
+
   const handleFinish = async () => {
     triggerHaptic('success');
-    await settings.completeOnboarding();
-    if (settings.alwaysOnVoiceEnabled && Platform.OS === 'android') {
-      ArgusSystemMonitors?.startVoiceDaemon?.().catch(() => {});
+    try {
+      await settings.completeOnboarding();
+    } catch (e) {
+      console.warn('[OnboardingAccessModal] completeOnboarding warning:', e);
     }
+    try {
+      if (settings.alwaysOnVoiceEnabled && Platform.OS === 'android') {
+        ArgusSystemMonitors?.startVoiceDaemon?.().catch(() => {});
+      }
+    } catch (e) {}
     onComplete();
   };
 
@@ -177,7 +193,7 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
       visible={visible}
       animationType="slide"
       transparent={false}
-      onRequestClose={canDismiss ? onComplete : undefined}
+      onRequestClose={canDismiss ? handleDismiss : undefined}
     >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -190,11 +206,13 @@ export function OnboardingAccessModal({ visible, onComplete, canDismiss = true }
           </View>
           {canDismiss && (
             <TouchableOpacity
-              onPress={handleFinish}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              onPress={handleDismiss}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               style={styles.closeBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss System Setup & Permissions"
             >
-              <Ionicons name="close-circle-sharp" size={26} color={colors.textSecondary} />
+              <Ionicons name="close-circle-sharp" size={28} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -661,6 +679,10 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     marginLeft: 12,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: 16,

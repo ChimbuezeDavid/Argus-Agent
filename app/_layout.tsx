@@ -49,6 +49,7 @@ export default function RootLayout() {
   const [habitTakeoverData, setHabitTakeoverData] = useState<HabitTakeoverPayload | null>(null);
   const appState = useRef(AppState.currentState);
   const lastBackgroundTime = useRef<number>(Date.now());
+  const settingsInitPromise = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const unsub = subscribeHabitTrigger((payload) => {
@@ -58,7 +59,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    settingsInitPromise.current = (async () => {
       try {
         await initializeDatabase();
         await loadSettings();
@@ -71,6 +72,12 @@ export default function RootLayout() {
   // Trigger onboarding or biometric unlock after welcome splash completes
   const handleSplashFinish = async () => {
     setShowSplash(false);
+    // Ensure settings are loaded from storage before evaluating onboarding state
+    if (settingsInitPromise.current) {
+      try {
+        await settingsInitPromise.current;
+      } catch {}
+    }
     const completed = useSettingsStore.getState().hasCompletedOnboarding;
     if (!completed) {
       setShowOnboarding(true);

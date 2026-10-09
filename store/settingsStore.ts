@@ -168,7 +168,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const savedAlwaysOnVoice = settingsMap['always_on_voice_enabled'] !== undefined ? settingsMap['always_on_voice_enabled'] === '1' : true;
       const savedAudioFeedback = settingsMap['audio_feedback_enabled'] === '1';
       const savedWakeWord = settingsMap['custom_wake_word'] || 'Hey Argus';
-      const savedOnboarding = settingsMap['has_completed_onboarding'] === '1';
+      let savedOnboarding = false;
+      try {
+        const secureFlag = await SecureStore.getItemAsync('ARGUS_ONBOARDING_DONE');
+        if (secureFlag === '1') {
+          savedOnboarding = true;
+        }
+      } catch (e) {}
+
+      if (settingsMap['has_completed_onboarding'] === '1') {
+        savedOnboarding = true;
+      }
 
       set({
         apiKey,
@@ -226,11 +236,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   completeOnboarding: async () => {
+    try {
+      await SecureStore.setItemAsync('ARGUS_ONBOARDING_DONE', '1');
+    } catch (e) {}
     await saveSetting('has_completed_onboarding', '1');
     set({ hasCompletedOnboarding: true });
   },
 
   resetOnboarding: async () => {
+    try {
+      await SecureStore.deleteItemAsync('ARGUS_ONBOARDING_DONE');
+    } catch (e) {}
     await saveSetting('has_completed_onboarding', '0');
     set({ hasCompletedOnboarding: false });
   },
