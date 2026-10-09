@@ -101,6 +101,55 @@ function withNotificationService(config) {
       console.log(`[Config Plugin] Injected ${voiceDaemonServiceClass} into AndroidManifest.xml`);
     }
 
+    // 4. Ella Voice Interaction Assistant Services (Transparent Overlay like Bixby)
+    const ellaVoiceServiceClass = 'com.argus.agent.monitors.EllaVoiceInteractionService';
+    const ellaVoiceExists = mainApplication.service.some(
+      (service) => service.$['android:name'] === ellaVoiceServiceClass
+    );
+    if (!ellaVoiceExists) {
+      mainApplication.service.push({
+        $: {
+          'android:name': ellaVoiceServiceClass,
+          'android:label': 'Ella Voice Assistant',
+          'android:permission': 'android.permission.BIND_VOICE_INTERACTION',
+          'android:exported': 'true',
+        },
+        'meta-data': [
+          {
+            $: {
+              'android:name': 'android.voice_interaction',
+              'android:resource': '@xml/ella_voice_interaction_service',
+            },
+          },
+        ],
+        'intent-filter': [
+          {
+            action: [
+              {
+                $: {
+                  'android:name': 'android.service.voice.VoiceInteractionService',
+                },
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    const ellaSessionServiceClass = 'com.argus.agent.monitors.EllaVoiceInteractionSessionService';
+    const ellaSessionExists = mainApplication.service.some(
+      (service) => service.$['android:name'] === ellaSessionServiceClass
+    );
+    if (!ellaSessionExists) {
+      mainApplication.service.push({
+        $: {
+          'android:name': ellaSessionServiceClass,
+          'android:permission': 'android.permission.BIND_VOICE_INTERACTION',
+          'android:exported': 'true',
+        },
+      });
+    }
+
     // Ensure receivers array exists
     if (!mainApplication.receiver) {
       mainApplication.receiver = [];

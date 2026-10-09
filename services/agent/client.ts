@@ -5,6 +5,11 @@ import { AGENT_TOOLS } from './definitions';
 import { executeTool } from './toolRunner';
 import { listActiveLearnedRules } from '../database/learnedRulesRepo';
 
+export interface AgentConversationResult {
+  content: string;
+  toolSteps: any[];
+}
+
 /**
  * Retrieves the Gemini API key from secure storage.
  */

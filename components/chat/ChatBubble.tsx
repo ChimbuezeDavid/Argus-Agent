@@ -11,6 +11,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  engine?: 'ella_local' | 'gemini_cloud';
+  latencyMs?: number;
   toolCalls?: any[];
   toolResults?: any[];
   actionType?: 'launch_app' | 'make_call' | 'expense' | 'budget';
@@ -58,6 +60,39 @@ export function ChatBubble({ item, copiedId, onCopy }: ChatBubbleProps) {
             : [styles.bubbleAssistant, { backgroundColor: colors.card, borderColor: colors.border }],
         ]}
       >
+        {/* Engine & Latency Metric Badge */}
+        {!isUser && (item.engine || item.latencyMs !== undefined) && (
+          <View
+            style={[
+              styles.engineBadgeRow,
+              {
+                backgroundColor: item.engine === 'ella_local' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(56, 189, 248, 0.12)',
+                borderColor: item.engine === 'ella_local' ? 'rgba(16, 185, 129, 0.28)' : 'rgba(56, 189, 248, 0.28)',
+              },
+            ]}
+          >
+            <Ionicons
+              name={item.engine === 'ella_local' ? 'flash' : 'cloud-outline'}
+              size={11}
+              color={item.engine === 'ella_local' ? '#10b981' : '#38bdf8'}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[
+                styles.engineBadgeText,
+                {
+                  color: item.engine === 'ella_local' ? '#10b981' : '#38bdf8',
+                  fontSize: scaleFont(9.5),
+                },
+              ]}
+            >
+              {item.engine === 'ella_local'
+                ? `⚡ Ella Local • ${item.latencyMs ? `${item.latencyMs}ms` : '<50ms'} (Offline)`
+                : `☁️ Gemini AI • ${item.latencyMs ? `${item.latencyMs}ms` : 'Cloud'}`}
+            </Text>
+          </View>
+        )}
+
         <RichMessageRenderer content={item.content} isUser={isUser} selectable={true} />
 
         {/* Tool Action Proof Badges */}
@@ -139,6 +174,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bubbleTextAssistant: {},
+  engineBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  engineBadgeText: {
+    fontWeight: '700',
+  },
   toolTraceRow: {
     flexDirection: 'row',
     alignItems: 'center',

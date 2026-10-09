@@ -32,6 +32,7 @@ import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 import { runAgentConversation } from '@/services/agent/client';
 import { hotwordController } from '@/services/voice/hotwordService';
 import { executeOfflineAction } from '@/services/actions/offlineDeviceActions';
+import { routeAndExecuteCommand, RoutingMode } from '@/services/orchestrator/intentRouter';
 
 // Extracted Modular Components
 import { TelemetryHeader } from '@/components/chat/TelemetryHeader';
@@ -49,6 +50,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  engine?: 'ella_local' | 'gemini_cloud';
+  latencyMs?: number;
   toolCalls?: any[];
   toolResults?: any[];
   actionType?: 'launch_app' | 'make_call' | 'expense' | 'budget';
@@ -76,6 +79,7 @@ export default function ArgusHomeScreen() {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [routingMode, setRoutingMode] = useState<RoutingMode>('auto');
 
   // Live Telemetry
   const [monthlyTotal, setMonthlyTotal] = useState(0);
@@ -367,53 +371,32 @@ export default function ArgusHomeScreen() {
     try {
       await conversationRepo.addMessage(convId, 'user', query);
 
-      // 1. Check if command can execute directly on-device without internet
-      const offlineResult = await executeOfflineAction(query);
-      if (offlineResult.handled) {
-        const assistantMsgId = (Date.now() + 1).toString();
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          role: 'assistant',
-          content: offlineResult.message,
-          timestamp: new Date().toISOString(),
-          toolCalls: offlineResult.actionType ? [offlineResult.actionType] : undefined,
-        };
-
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        await conversationRepo.addMessage(
-          convId,
-          'assistant',
-          offlineResult.message,
-          offlineResult.actionType ? [{ toolCall: offlineResult.actionType, result: offlineResult.data }] : null,
-          null
-        );
-
-        if (settings.audioFeedbackEnabled) {
-          voiceService.speak(offlineResult.message);
-        }
-
-        refreshHomeScreenData();
-        return;
-      }
-
-      // 2. Multimodal cloud intelligence with Gemini
+      // Unified Hybrid Execution Pipeline (Ella vs. Gemini)
       const conversationHistory = [...messages, newMsg].map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
       const activeModel = settings.geminiModel || 'gemini-3.7-flash';
-      const response = await runAgentConversation(conversationHistory, activeModel);
+      const routed = await routeAndExecuteCommand(
+        query,
+        routingMode,
+        conversationHistory,
+        activeModel
+      );
 
       const assistantMsgId = (Date.now() + 1).toString();
       const assistantMsg: Message = {
         id: assistantMsgId,
         role: 'assistant',
-        content: response.content,
+        content: routed.content,
         timestamp: new Date().toISOString(),
-        toolCalls: response.toolSteps?.map((s) => s.toolCall),
-        toolResults: response.toolSteps?.map((s) => s.result),
+        engine: routed.engine,
+        latencyMs: routed.latencyMs,
+        toolCalls: routed.toolCalls,
+        toolResults: routed.toolResults,
+        actionType: routed.actionType as any,
+        actionData: routed.data,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
@@ -421,14 +404,14 @@ export default function ArgusHomeScreen() {
       await conversationRepo.addMessage(
         convId,
         'assistant',
-        response.content,
-        response.toolSteps ? response.toolSteps : null,
+        routed.content,
+        routed.toolCalls ? routed.toolCalls : null,
         null
       );
 
       // Spoken voice feedback (only if user enabled audio feedback)
       if (settings.audioFeedbackEnabled) {
-        voiceService.speak(response.content);
+        voiceService.speak(routed.content);
       }
 
       refreshHomeScreenData();
@@ -623,14 +606,25 @@ export default function ArgusHomeScreen() {
         </View>
       )}
 
-      {/* 3. Floating Omnibar Capsule Dock */}
+      {/* 3. Multi-Level Omnibar Capsule Dock */}
       <Omnibar
         insetsBottom={insets.bottom}
         inputText={inputText}
         onChangeText={setInputText}
         onSend={() => handleSend()}
         isProcessing={isProcessing}
-        onOpenVoiceModal={() => setVoiceModalVisible(true)}
+        routingMode={routingMode}
+        onSelectRoutingMode={setRoutingMode}
+        onOpenVoiceModal={async () => {
+          try {
+            const overlayShown = await ArgusSystemMonitors.triggerEllaOverlay();
+            if (!overlayShown) {
+              setVoiceModalVisible(true);
+            }
+          } catch {
+            setVoiceModalVisible(true);
+          }
+        }}
       />
 
       {/* 4. Dedicated Voice Assistant Modal */}

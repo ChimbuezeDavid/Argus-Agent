@@ -343,6 +343,7 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         val patterns = listOf(
             Regex("^(?:hey|hi|hello|ok|okay)?\\s*${Regex.escape(trigger)}[\\s,]*(.*)$", RegexOption.IGNORE_CASE),
             Regex("^(?:hey|hi|hello|ok|okay)?\\s*${Regex.escape(core)}[\\s,]*(.*)$", RegexOption.IGNORE_CASE),
+            Regex("^(?:hey|hi|hello|ok|okay)?\\s*ella[\\s,]*(.*)$", RegexOption.IGNORE_CASE),
             Regex("^(?:hey|hi|hello|ok|okay)?\\s*argus[\\s,]*(.*)$", RegexOption.IGNORE_CASE)
         )
 
@@ -350,11 +351,17 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
             val match = pattern.find(clean)
             if (match != null) {
                 val command = match.groupValues.getOrNull(1)?.trim() ?: ""
-                Log.i(TAG, "Custom wake word '$trigger' triggered! Command: '$command'")
+                Log.i(TAG, "Voice hotword '$trigger' triggered! Command: '$command'")
 
                 triggerHapticAlert()
-                showBixbyFloatingCapsule(command.ifEmpty { "I'm listening..." })
-                wakeUpAndExecute(command)
+
+                // 1. Launch lightweight Ella transparent overlay session directly over whatever app is active
+                val overlayTriggered = EllaVoiceInteractionService.triggerOverlaySession(command)
+                if (!overlayTriggered) {
+                    // 2. Fallback to floating capsule overlay
+                    showBixbyFloatingCapsule(command.ifEmpty { "I'm listening..." })
+                    wakeUpAndExecute(command)
+                }
                 return
             }
         }

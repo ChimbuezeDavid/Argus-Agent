@@ -93,6 +93,8 @@ export interface ArgusSystemMonitorsType {
   isIgnoringBatteryOptimizations(): Promise<boolean>;
   requestIgnoreBatteryOptimizations(): Promise<boolean>;
   openDefaultAssistantSettings(): Promise<boolean>;
+  triggerEllaOverlay(command?: string): Promise<boolean>;
+  isEllaAssistantActive(): Promise<boolean>;
   getLaunchWakeCommand(): Promise<string>;
   addSpeechListener(
     event:
@@ -675,6 +677,24 @@ export const ArgusSystemMonitors: ArgusSystemMonitorsType = {
     try {
       if (rawNativeModule && typeof rawNativeModule.openDefaultAssistantSettings === 'function') {
         return await rawNativeModule.openDefaultAssistantSettings();
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  triggerEllaOverlay: async (command?: string): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.triggerEllaOverlay === 'function') {
+        return await rawNativeModule.triggerEllaOverlay(command || null);
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  isEllaAssistantActive: async (): Promise<boolean> => {
+    try {
+      if (rawNativeModule && typeof rawNativeModule.isEllaAssistantActive === 'function') {
+        return await rawNativeModule.isEllaAssistantActive();
       }
     } catch (e) {}
     return false;

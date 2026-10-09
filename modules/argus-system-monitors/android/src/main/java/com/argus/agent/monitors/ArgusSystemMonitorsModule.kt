@@ -919,6 +919,14 @@ class ArgusSystemMonitorsModule : Module() {
       }
     }
 
+    AsyncFunction("triggerEllaOverlay") { command: String? ->
+      EllaVoiceInteractionService.triggerOverlaySession(command)
+    }
+
+    AsyncFunction("isEllaAssistantActive") { ->
+      EllaVoiceInteractionService.instance != null
+    }
+
     OnCreate {
       ArgusVoiceDaemonService.onWakeWordCallback = { command ->
         sendEvent("onWakeWordDetected", Bundle().apply {

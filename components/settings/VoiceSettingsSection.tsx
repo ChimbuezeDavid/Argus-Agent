@@ -6,6 +6,8 @@ import { SectionCard, ToggleRow, ChipSelector, ChipOption } from '@/components/s
 import ArgusSystemMonitors from '@/modules/argus-system-monitors';
 
 export const WAKE_WORD_PRESETS: ChipOption[] = [
+  { id: 'Hey Ella', label: 'Hey Ella' },
+  { id: 'Ella', label: 'Ella' },
   { id: 'Hey Argus', label: 'Hey Argus' },
   { id: 'Hey Dave', label: 'Hey Dave' },
   { id: 'Dave', label: 'Dave' },
@@ -333,7 +335,58 @@ export function VoiceSettingsSection({ settings }: VoiceSettingsSectionProps) {
         </View>
       </SectionCard>
 
-      {/* 3. Spoken Audio Feedback */}
+      {/* 3. Ella Assistant & Transparent Overlay (Like Bixby) */}
+      <SectionCard
+        icon={<Ionicons name="layers-outline" size={scaleFont(20)} color="#38bdf8" />}
+        title="Ella Overlay & System Assistant"
+        subtitle="Trigger Ella as a lightweight transparent HUD over active apps without opening the full UI."
+      >
+        <View style={styles.assistantCard}>
+          <Text style={[styles.assistantCardDesc, { color: colors.textSecondary, fontSize: scaleFont(12) }]}>
+            Ella uses Android VoiceInteractionSession to appear as a floating capsule directly over whatever app you're currently using. Device actions execute in &lt;50ms without internet dependency.
+          </Text>
+
+          {/* Test Overlay Button */}
+          <TouchableOpacity
+            style={[styles.assistantActionBtn, { backgroundColor: '#38bdf818', borderColor: '#38bdf860', marginBottom: 8 }]}
+            onPress={async () => {
+              triggerHaptic('selection');
+              const res = await ArgusSystemMonitors.triggerEllaOverlay();
+              if (!res) {
+                Alert.alert(
+                  'Ella Overlay',
+                  'To use Ella as your global assistant, enable Ella as the Default Digital Assistant in Android settings below.'
+                );
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="sparkles" size={15} color="#38bdf8" style={{ marginRight: 6 }} />
+            <Text style={[styles.assistantActionBtnText, { color: '#38bdf8', fontSize: scaleFont(12) }]}>
+              Test Ella Transparent Overlay HUD
+            </Text>
+          </TouchableOpacity>
+
+          {/* Open Android Assistant Settings */}
+          {Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={[styles.assistantActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                triggerHaptic('selection');
+                ArgusSystemMonitors.openDefaultAssistantSettings();
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={15} color={colors.text} style={{ marginRight: 6 }} />
+              <Text style={[styles.assistantActionBtnText, { color: colors.text, fontSize: scaleFont(12) }]}>
+                Set Ella as Default Phone Assistant
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </SectionCard>
+
+      {/* 4. Spoken Audio Feedback */}
       <SectionCard
         icon={<Ionicons name="volume-high" size={scaleFont(20)} color="#f59e0b" />}
         title="Spoken Audio Feedback"
@@ -490,5 +543,23 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 14,
     fontStyle: 'italic',
+  },
+  assistantCard: {
+    paddingTop: 4,
+  },
+  assistantCardDesc: {
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  assistantActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  assistantActionBtnText: {
+    fontWeight: '700',
   },
 });
