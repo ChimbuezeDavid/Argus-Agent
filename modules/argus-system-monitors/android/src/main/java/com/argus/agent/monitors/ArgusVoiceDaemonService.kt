@@ -592,6 +592,15 @@ class ArgusVoiceDaemonService : Service(), TextToSpeech.OnInitListener {
         // 1. Notify static callback if React Native is attached
         onWakeWordCallback?.invoke(command)
 
+        // 1b. Dispatch local broadcast for any detached listeners
+        try {
+            val bIntent = Intent("com.argus.agent.WAKE_WORD_DETECTED").apply {
+                setPackage(packageName)
+                putExtra("command", command)
+            }
+            sendBroadcast(bIntent)
+        } catch (e: Exception) {}
+
         // 2. Launch or bring MainActivity to the foreground via direct intent & fullScreenIntent fallback
         try {
             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {

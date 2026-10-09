@@ -9,7 +9,7 @@ import {
   Alert,
   Switch,
 } from 'react-native';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useHCITheme } from '@/hooks/useHCITheme';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ModalSheet } from '@/components/shared/ModalSheet';
@@ -274,7 +274,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
       case 'urgent':
         return '#ef4444';
       case 'high':
-        return '#f97316';
+        return '#fb923c';
       default:
         return '#0284c7';
     }
@@ -418,7 +418,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                     </Text>
 
                     <View style={[styles.priorityBadge, { backgroundColor: `${pColor}20` }]}>
-                      <Text style={[styles.priorityText, { color: pColor, fontSize: scaleFont(9.5) }]}>
+                      <Text style={[styles.priorityText, { color: pColor, fontSize: scaleFont(11) }]}>
                         {isSchedule ? 'ROUTINE' : plan.priority.toUpperCase()}
                       </Text>
                     </View>
@@ -426,7 +426,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
 
                   {plan.description ? (
                     <Text
-                      style={[styles.planDesc, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}
+                      style={[styles.planDesc, { color: colors.textSecondary, fontSize: scaleFont(12.5) }]}
                       numberOfLines={2}
                     >
                       {plan.description}
@@ -437,8 +437,8 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                   <View style={styles.planMetaRow}>
                     {isSchedule ? (
                       <View style={styles.metaItem}>
-                        <Ionicons name="repeat-outline" size={13} color="#10b981" style={{ marginRight: 4 }} />
-                        <Text style={[styles.metaText, { color: '#10b981', fontSize: scaleFont(10.5) }]}>
+                        <Ionicons name="repeat-outline" size={14} color="#10b981" style={{ marginRight: 5 }} />
+                        <Text style={[styles.metaText, { color: '#10b981', fontSize: scaleFont(11.5) }]}>
                           {plan.days_duration || 7} Days {plan.repeat_weekly ? '• Weekly' : ''} ({scheduleBlocksCount} blocks)
                         </Text>
                       </View>
@@ -446,8 +446,8 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                       <>
                         {plan.due_date && (
                           <View style={styles.metaItem}>
-                            <Ionicons name="calendar-outline" size={13} color={colors.textMuted} style={{ marginRight: 4 }} />
-                            <Text style={[styles.metaText, { color: colors.textMuted, fontSize: scaleFont(10.5) }]}>
+                            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} style={{ marginRight: 5 }} />
+                            <Text style={[styles.metaText, { color: colors.textMuted, fontSize: scaleFont(11.5) }]}>
                               {plan.due_date} {plan.due_time || ''}
                             </Text>
                           </View>
@@ -456,14 +456,14 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                     )}
 
                     <View style={[styles.categoryTag, { backgroundColor: colors.background }]}>
-                      <Text style={[styles.categoryTagText, { color: colors.textMuted, fontSize: scaleFont(9.5) }]}>
+                      <Text style={[styles.categoryTagText, { color: colors.textMuted, fontSize: scaleFont(11) }]}>
                         {(isSchedule ? 'Schedule' : plan.category).toUpperCase()}
                       </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
 
-                {/* Delete Button (44dp touch target) */}
+                {/* Delete Button (48dp touch target) */}
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => handleDelete(plan.id)}
@@ -471,7 +471,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   accessibilityLabel="Delete plan"
                 >
-                  <Feather name="trash-2" size={16} color={colors.textMuted} />
+                  <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
             );
@@ -813,7 +813,12 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                 <Text style={[styles.inputLabel, { color: colors.textSecondary, fontSize: scaleFont(11.5) }]}>
                   CONFIGURE DAY TIMELINE
                 </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled={true}
+                  contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+                >
                   {daySchedules.map((day, idx) => {
                     const isSelected = selectedDayIndex === idx;
                     return (
@@ -837,7 +842,7 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
                             styles.dayTabPillText,
                             {
                               color: isSelected ? colors.primary : colors.textSecondary,
-                              fontSize: scaleFont(11.5),
+                              fontSize: scaleFont(12),
                               fontWeight: isSelected ? '800' : '600',
                             },
                           ]}
@@ -852,31 +857,32 @@ export default function PlanTab({ refreshSignal }: PlanTabProps) {
 
               {/* Selected Day Time Blocks Timeline */}
               <View style={[styles.dayTimelineCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text style={[styles.timelineHeader, { color: colors.text, fontSize: scaleFont(12.5) }]}>
+                <Text style={[styles.timelineHeader, { color: colors.text, fontSize: scaleFont(13) }]}>
                   {daySchedules[selectedDayIndex]?.dayName || 'Day'} Routine Blocks
                 </Text>
 
                 {daySchedules[selectedDayIndex]?.blocks.length === 0 ? (
-                  <Text style={[styles.noBlocksText, { color: colors.textMuted, fontSize: scaleFont(11.5) }]}>
+                  <Text style={[styles.noBlocksText, { color: colors.textMuted, fontSize: scaleFont(12) }]}>
                     No activities defined for this day. Add time blocks below.
                   </Text>
                 ) : (
                   daySchedules[selectedDayIndex]?.blocks.map((b) => (
                     <View key={b.id} style={[styles.blockItemRow, { borderColor: colors.border }]}>
                       <View style={[styles.timeBadge, { backgroundColor: `${colors.primary}18` }]}>
-                        <Text style={[styles.timeBadgeText, { color: colors.primary, fontSize: scaleFont(10.5) }]}>
+                        <Text style={[styles.timeBadgeText, { color: colors.primary, fontSize: scaleFont(11) }]}>
                           {b.time}
                         </Text>
                       </View>
-                      <Text style={[styles.blockActivityText, { color: colors.text, fontSize: scaleFont(12.5) }]} numberOfLines={1}>
+                      <Text style={[styles.blockActivityText, { color: colors.text, fontSize: scaleFont(13) }]} numberOfLines={1}>
                         {b.activity}
                       </Text>
                       <TouchableOpacity
                         onPress={() => handleRemoveBlock(selectedDayIndex, b.id)}
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         style={styles.blockDeleteBtn}
+                        accessibilityLabel="Delete time block"
                       >
-                        <Feather name="x" size={16} color={colors.textMuted} />
+                        <Ionicons name="close" size={18} color={colors.textMuted} />
                       </TouchableOpacity>
                     </View>
                   ))
@@ -952,10 +958,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 16,
+    height: 44,
     borderRadius: 14,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterText: {
     fontWeight: '700',
@@ -963,8 +971,9 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    height: 44,
+    paddingHorizontal: 16,
     borderRadius: 14,
   },
   addBtnText: {
@@ -983,16 +992,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   checkboxTouchTarget: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    marginRight: 8,
   },
   checkbox: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1013,21 +1022,21 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   priorityBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   priorityText: {
     fontWeight: '800',
   },
   planDesc: {
-    lineHeight: 16,
-    marginBottom: 6,
+    lineHeight: 18,
+    marginBottom: 8,
   },
   planMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   metaItem: {
     flexDirection: 'row',
@@ -1037,32 +1046,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   categoryTag: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   categoryTagText: {
     fontWeight: '700',
   },
   deleteBtn: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modeSelectorWrap: {
     flexDirection: 'row',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 4,
   },
   modeOptionBtn: {
     flex: 1,
-    height: 44,
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 11,
+    borderRadius: 12,
   },
   modeOptionText: {
     fontWeight: '700',
@@ -1079,7 +1088,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   multilineBox: {
-    height: 76,
+    height: 80,
     paddingVertical: 10,
     textAlignVertical: 'top',
   },
@@ -1093,10 +1102,12 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   quickDateChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickDateText: {
     fontWeight: '700',
@@ -1107,7 +1118,7 @@ const styles = StyleSheet.create({
   },
   selectChip: {
     flex: 1,
-    height: 44,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
@@ -1134,10 +1145,10 @@ const styles = StyleSheet.create({
   },
   dayNumBtn: {
     flex: 1,
-    height: 42,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1.5,
   },
   dayNumText: {
@@ -1159,10 +1170,12 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   dayTabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 16,
+    height: 44,
     borderRadius: 12,
     borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dayTabPillText: {
     letterSpacing: 0.2,
@@ -1184,12 +1197,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    paddingVertical: 10,
+    minHeight: 52,
+    paddingVertical: 8,
     gap: 10,
   },
   timeBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
   },
   timeBadgeText: {
@@ -1200,8 +1214,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   blockDeleteBtn: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1212,7 +1226,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   timeInputBox: {
-    width: 95,
+    width: 105,
     textAlign: 'center',
   },
   addBlockBtn: {

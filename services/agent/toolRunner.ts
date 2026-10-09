@@ -382,17 +382,19 @@ export async function executeTool(name: string, args: any): Promise<any> {
         return fileWriteResult;
 
       case 'list_storage_files':
+        const targetSubPath = args.path || args.subfolder || undefined;
         const dirFiles = await storageService.listDirectoryFiles(
           args.directory_type || 'downloads',
-          undefined,
+          targetSubPath,
           args.extension_filter
         );
         return {
           success: true,
           directory: args.directory_type,
+          path: targetSubPath,
           count: dirFiles.length,
           files: dirFiles,
-          message: `Found ${dirFiles.length} item(s) in ${args.directory_type}`,
+          message: `Found ${dirFiles.length} item(s) in ${args.directory_type}${targetSubPath ? `/${targetSubPath}` : ''}`,
         };
 
       // =========================================================================

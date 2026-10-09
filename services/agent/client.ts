@@ -214,83 +214,161 @@ export function cleanModelResponse(text: string): string {
   return cleaned;
 }
 
+function formatBytes(bytes?: number): string {
+  if (typeof bytes !== 'number' || bytes <= 0) return '';
+  if (bytes < 1024) return ` (${bytes} B)`;
+  if (bytes < 1024 * 1024) return ` (${(bytes / 1024).toFixed(1)} KB)`;
+  if (bytes < 1024 * 1024 * 1024) return ` (${(bytes / (1024 * 1024)).toFixed(1)} MB)`;
+  return ` (${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB)`;
+}
+
+interface TreeNode {
+  name: string;
+  isDir: boolean;
+  size?: number;
+  children: Map<string, TreeNode>;
+}
+
 function formatHierarchicalFileList(items: any[], baseDirName: string = 'Storage'): string {
   if (!Array.isArray(items) || items.length === 0) return 'No items found.';
 
-  const groups: Record<string, { folders: string[]; files: string[] }> = {};
+  const root: TreeNode = {
+    name: baseDirName,
+    isDir: true,
+    children: new Map(),
+  };
 
+  // 1. Build topological tree structure
   for (const item of items) {
     const rawPath = typeof item === 'string' ? item : (item.path || item.name || '');
     const isDir = typeof item === 'object' ? !!item.isDirectory : false;
-    const name = typeof item === 'string' ? item.split('/').pop() || item : (item.name || rawPath.split('/').pop() || '');
+    const size = typeof item === 'object' ? item.size : undefined;
 
-    const parts = rawPath.split('/').filter(Boolean);
-    const parentDir = parts.length > 1 ? parts.slice(0, -1).join('/') : baseDirName;
+    // Normalize path relative to base directories
+    const normalized = rawPath
+      .replace(/^\/storage\/emulated\/0\/(?:Download|Documents|DCIM|Pictures)?\/?/i, '')
+      .replace(/^\//, '');
 
-    if (!groups[parentDir]) {
-      groups[parentDir] = { folders: [], files: [] };
-    }
+    const segments = normalized.split('/').filter(Boolean);
+    if (segments.length === 0) continue;
 
-    if (isDir) {
-      if (!groups[parentDir].folders.includes(name)) {
-        groups[parentDir].folders.push(name);
+    let current = root;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const isLast = i === segments.length - 1;
+      const segIsDir = isLast ? isDir : true;
+
+      if (!current.children.has(seg)) {
+        current.children.set(seg, {
+          name: seg,
+          isDir: segIsDir,
+          size: isLast && !isDir ? size : undefined,
+          children: new Map(),
+        });
+      } else if (isLast) {
+        const existing = current.children.get(seg)!;
+        existing.isDir = isDir;
+        if (!isDir && typeof size === 'number') existing.size = size;
       }
-    } else {
-      if (!groups[parentDir].files.includes(name)) {
-        groups[parentDir].files.push(name);
-      }
+      current = current.children.get(seg)!;
     }
   }
 
-  const output: string[] = [];
-  for (const [dir, contents] of Object.entries(groups)) {
-    const dirName = dir.split('/').pop() || dir;
-    output.push(`📁 ${dirName}/`);
-    for (const f of contents.folders) {
-      output.push(`   📁 ${f}/`);
-    }
-    for (const fl of contents.files) {
-      output.push(`   • ${fl}`);
-    }
+  // 2. Render tree recursively with clean ASCII branch glyphs
+  const lines: string[] = [`📁 ${baseDirName}/`];
+
+  function renderBranch(node: TreeNode, prefix: string, isLast: boolean) {
+    const branch = isLast ? '└── ' : '├── ';
+    const icon = node.isDir ? '📁 ' : '📄 ';
+    const suffix = node.isDir ? '/' : formatBytes(node.size);
+    lines.push(`${prefix}${branch}${icon}${node.name}${suffix}`);
+
+    const childPrefix = prefix + (isLast ? '    ' : '│   ');
+    const children = Array.from(node.children.values()).sort((a, b) => {
+      // Folders first, then files alphabetically
+      if (a.isDir && !b.isDir) return -1;
+      if (!a.isDir && b.isDir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    children.forEach((child, idx) => {
+      renderBranch(child, childPrefix, idx === children.length - 1);
+    });
   }
 
-  return output.join('\n');
+  const topChildren = Array.from(root.children.values()).sort((a, b) => {
+    if (a.isDir && !b.isDir) return -1;
+    if (!a.isDir && b.isDir) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  topChildren.forEach((child, idx) => {
+    renderBranch(child, '', idx === topChildren.length - 1);
+  });
+
+  return lines.join('\n');
 }
 
 /**
  * Intelligent synthesis of executed tool results if model failover or secondary turn fails.
- * Formats directory listings, search results, or expense details clearly instead of a blank stub.
+ * Formats directory listings, search results, plans, notes, and device controls cleanly.
  */
 function synthesizeToolSummary(toolSteps: any[]): string {
   const parts: string[] = [];
   for (const step of toolSteps) {
     for (const res of step.tool_results || []) {
-      if (res.name === 'list_storage_files') {
-        const files = res.result?.files || res.result?.items || res.result?.folders || [];
+      const name = res.name;
+      const r = res.result;
+
+      if (name === 'list_storage_files') {
+        const files = r?.files || r?.items || r?.folders || [];
+        const dirName = r?.path ? `${r?.directory}/${r.path}` : (r?.directory || 'Storage');
         if (Array.isArray(files) && files.length > 0) {
-          parts.push(`Here is the hierarchical structure of items found:\n\n${formatHierarchicalFileList(files, res.result?.directory || 'Downloads')}`);
+          parts.push(`Here is the hierarchical folder and file structure in ${dirName}:\n\n${formatHierarchicalFileList(files, dirName)}`);
         } else {
-          parts.push('No files or folders were found in your directory.');
+          parts.push(`No files or folders found in ${dirName}.`);
         }
-      } else if (res.name === 'search_device_storage') {
-        const files = res.result?.files || [];
+      } else if (name === 'search_device_storage') {
+        const files = r?.files || [];
         if (Array.isArray(files) && files.length > 0) {
-          parts.push(`Found the following matching files grouped by directory:\n\n${formatHierarchicalFileList(files, 'Storage')}`);
+          parts.push(`Found ${files.length} matching item(s) in device storage:\n\n${formatHierarchicalFileList(files, 'Storage')}`);
         } else {
-          parts.push('No matching files found in device storage.');
+          parts.push(`No matching files found for query "${r?.query || ''}".`);
         }
-      } else if (res.name === 'add_expense') {
-        parts.push(res.result?.message || `Logged expense successfully.`);
-      } else if (res.name === 'list_expenses') {
-        parts.push(res.result?.message || 'Retrieved expense records.');
-      } else if (res.name === 'get_current_location') {
-        parts.push(res.result?.address ? `Current location: ${res.result.address}` : 'Retrieved current device location.');
-      } else if (typeof res.result === 'string') {
-        parts.push(res.result);
-      } else if (res.result?.message) {
-        parts.push(res.result.message);
+      } else if (name === 'read_file_content') {
+        parts.push(r?.content ? `File content (${r.charCount} characters):\n\n${r.content}` : (r?.message || 'Read file completed.'));
+      } else if (name === 'write_file_to_storage') {
+        parts.push(r?.message || `File written to storage successfully.`);
+      } else if (name === 'add_expense') {
+        parts.push(r?.message || `Logged expense successfully.`);
+      } else if (name === 'list_expenses') {
+        parts.push(r?.message || 'Retrieved expense records.');
+      } else if (name === 'get_expense_summary') {
+        parts.push(r?.message || `Retrieved monthly budget summary.`);
+      } else if (name === 'create_note') {
+        parts.push(r?.message || `Note created successfully.`);
+      } else if (name === 'list_notes') {
+        parts.push(r?.message || `Retrieved note archives.`);
+      } else if (name === 'create_plan' || name === 'update_plan') {
+        parts.push(r?.message || `Plan saved successfully.`);
+      } else if (name === 'list_plans') {
+        parts.push(r?.message || `Retrieved user schedule and action plans.`);
+      } else if (name === 'toggle_habit' || name === 'list_habits') {
+        parts.push(r?.message || `Updated habit tracking.`);
+      } else if (name === 'open_app') {
+        parts.push(r?.message || `Launched application on your phone.`);
+      } else if (name === 'make_phone_call') {
+        parts.push(r?.message || `Initiated phone call.`);
+      } else if (name === 'send_whatsapp_message') {
+        parts.push(r?.message || `Prepared WhatsApp message.`);
+      } else if (name === 'get_current_location') {
+        parts.push(r?.address ? `Current location: ${r.address}` : 'Retrieved current device GPS coordinates.');
+      } else if (typeof r === 'string') {
+        parts.push(r);
+      } else if (r?.message) {
+        parts.push(r.message);
       } else {
-        parts.push(JSON.stringify(res.result, null, 2));
+        parts.push(JSON.stringify(r, null, 2));
       }
     }
   }

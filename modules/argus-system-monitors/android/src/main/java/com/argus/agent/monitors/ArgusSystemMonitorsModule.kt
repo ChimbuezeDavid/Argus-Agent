@@ -3,8 +3,10 @@ package com.argus.agent.monitors
 import android.app.AppOpsManager
 import android.app.SearchManager
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -40,6 +42,7 @@ class ArgusSystemMonitorsModule : Module() {
   private val SPEECH_REQUEST_CODE = 42101
   private var mediaRecorder: MediaRecorder? = null
   private var audioRecordingFile: File? = null
+  private var wakeWordReceiver: BroadcastReceiver? = null
 
   override fun definition() = ModuleDefinition {
     Name("ArgusSystemMonitors")
@@ -933,10 +936,38 @@ class ArgusSystemMonitorsModule : Module() {
           putString("command", command)
         })
       }
+
+      val context = appContext.reactContext
+      if (context != null) {
+        val receiver = object : BroadcastReceiver() {
+          override fun onReceive(c: Context?, intent: Intent?) {
+            if (intent?.action == "com.argus.agent.WAKE_WORD_DETECTED") {
+              val command = intent.getStringExtra("command") ?: ""
+              sendEvent("onWakeWordDetected", Bundle().apply {
+                putString("command", command)
+              })
+            }
+          }
+        }
+        wakeWordReceiver = receiver
+        val filter = IntentFilter("com.argus.agent.WAKE_WORD_DETECTED")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+          context.registerReceiver(receiver, filter)
+        }
+      }
     }
 
     OnDestroy {
       ArgusVoiceDaemonService.onWakeWordCallback = null
+      val context = appContext.reactContext
+      if (context != null && wakeWordReceiver != null) {
+        try {
+          context.unregisterReceiver(wakeWordReceiver)
+        } catch (e: Exception) {}
+        wakeWordReceiver = null
+      }
     }
 
     // =========================================================================
@@ -963,10 +994,10 @@ class ArgusSystemMonitorsModule : Module() {
         var recorder: MediaRecorder? = null
         var recordStarted = false
 
-        // Attempt 1: Standard AAC / MPEG4
+        // Attempt 1: Standard AAC / MPEG4 with VOICE_RECOGNITION audio source
         try {
           recorder = @Suppress("DEPRECATION") MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             setOutputFile(audioFile.absolutePath)
@@ -981,13 +1012,33 @@ class ArgusSystemMonitorsModule : Module() {
           recorder = null
         }
 
-        // Attempt 2: Universal 3GPP / AMR_NB fallback for MediaTek/HiOS chips
+        // Attempt 2: Standard AAC with MIC fallback
+        if (!recordStarted) {
+          try {
+            recorder = @Suppress("DEPRECATION") MediaRecorder().apply {
+              setAudioSource(MediaRecorder.AudioSource.MIC)
+              setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+              setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+              setOutputFile(audioFile.absolutePath)
+              prepare()
+              start()
+            }
+            recordStarted = true
+          } catch (eMic: Exception) {
+            try {
+              recorder?.release()
+            } catch (e: Exception) {}
+            recorder = null
+          }
+        }
+
+        // Attempt 3: Universal 3GPP / AMR_NB fallback for MediaTek/HiOS chips
         if (!recordStarted) {
           try {
             audioFile = File(cacheDir, "argus_voice_${System.currentTimeMillis()}.3gp")
             audioRecordingFile = audioFile
             recorder = @Suppress("DEPRECATION") MediaRecorder().apply {
-              setAudioSource(MediaRecorder.AudioSource.MIC)
+              setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
               setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
               setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
               setOutputFile(audioFile.absolutePath)

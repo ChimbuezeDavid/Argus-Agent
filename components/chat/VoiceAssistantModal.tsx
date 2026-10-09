@@ -42,6 +42,9 @@ export function VoiceAssistantModal({
   const speechDetectedRef = useRef<boolean>(false);
   const silenceStartTimeRef = useRef<number | null>(null);
   const isExecutingRef = useRef<boolean>(false);
+  const ambientFloorRef = useRef<number>(150);
+  const calibrationCountRef = useRef<number>(0);
+  const speechStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -96,6 +99,9 @@ export function VoiceAssistantModal({
     speechDetectedRef.current = false;
     silenceStartTimeRef.current = null;
     isExecutingRef.current = false;
+    ambientFloorRef.current = 150;
+    calibrationCountRef.current = 0;
+    speechStartTimeRef.current = null;
 
     const hasPermission = await requestMicPermission();
     if (!hasPermission) {
@@ -110,40 +116,66 @@ export function VoiceAssistantModal({
         setIsRecording(true);
         setStatusMessage('🎙️ Listening... Speak naturally.');
 
-        // 1. Automated Voice Activity Detection (VAD) / Silence Detection Loop
-        const SPEECH_THRESHOLD = 1800; // speech amplitude threshold
-        const SILENCE_DURATION_MS = 1500; // 1.5s of silence after speech triggers auto-finish
+        // 1. Adaptive Voice Activity Detection (VAD) & Silence Auto-Stop Loop
+        const SILENCE_DURATION_MS = 1200; // 1.2s of post-speech silence auto-completes utterance
 
         vadIntervalRef.current = setInterval(async () => {
           if (isExecutingRef.current) return;
           try {
-            const amp = await ArgusSystemMonitors.getAudioCaptureAmplitude();
-            if (amp > SPEECH_THRESHOLD) {
+            const rawAmp = await ArgusSystemMonitors.getAudioCaptureAmplitude();
+            const amp = typeof rawAmp === 'number' ? rawAmp : 0;
+
+            // Calibration phase (first 3 intervals ~ 450ms)
+            if (calibrationCountRef.current < 3) {
+              if (amp > 0) {
+                ambientFloorRef.current = Math.min(ambientFloorRef.current, amp);
+              }
+              calibrationCountRef.current++;
+              return;
+            }
+
+            // Adaptive dynamic speech threshold: at least 2.2x ambient floor or min 600
+            const dynamicSpeechThreshold = Math.max(ambientFloorRef.current * 2.2, 600);
+
+            if (amp > dynamicSpeechThreshold) {
+              if (!speechDetectedRef.current) {
+                speechStartTimeRef.current = Date.now();
+              }
               speechDetectedRef.current = true;
               silenceStartTimeRef.current = null;
               setStatusMessage('🗣️ Hearing you speak...');
             } else if (speechDetectedRef.current) {
               const now = Date.now();
+
+              // Maximum speech utterance window safeguard: auto-complete after 6 seconds of speech
+              if (speechStartTimeRef.current && now - speechStartTimeRef.current >= 6000) {
+                console.log('[VAD] Maximum speech duration reached. Auto-submitting...');
+                isExecutingRef.current = true;
+                clearAllTimers();
+                handleFinishAndTranscribe();
+                return;
+              }
+
               if (!silenceStartTimeRef.current) {
                 silenceStartTimeRef.current = now;
               } else if (now - silenceStartTimeRef.current >= SILENCE_DURATION_MS) {
-                // User has finished speaking! Auto-submit without requiring manual tap
-                console.log('[VAD] End of speech silence detected. Auto-completing recording...');
+                // Natural pause detected after speaking - automatically complete without manual tap
+                console.log('[VAD] End-of-speech silence detected. Auto-completing recording...');
                 isExecutingRef.current = true;
                 clearAllTimers();
                 handleFinishAndTranscribe();
               }
             }
           } catch (e) {}
-        }, 180);
+        }, 150);
 
-        // 2. Safety fallback timeout (12s maximum recording window)
+        // 2. Safety timeout fallback (10s maximum recording window)
         recordingTimeoutRef.current = setTimeout(() => {
           if (!isExecutingRef.current) {
             isExecutingRef.current = true;
             handleFinishAndTranscribe();
           }
-        }, 12000);
+        }, 10000);
       } else {
         setStatusMessage(res.error || 'Could not start microphone');
       }

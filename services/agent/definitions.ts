@@ -514,13 +514,17 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'list_storage_files',
-    description: 'Lists files in standard device storage directories (Downloads, Documents, DCIM, Pictures).',
+    description: 'Lists files and folders in standard device storage directories (Downloads, Documents, DCIM, Pictures), or specific nested subfolders.',
     parameters: {
       type: 'OBJECT',
       properties: {
         directory_type: {
           type: 'STRING',
           description: 'The directory to inspect: "downloads", "documents", "dcim", or "pictures"'
+        },
+        path: {
+          type: 'STRING',
+          description: 'Optional subfolder path or relative directory path to list (e.g. "Invoices", "receipts/2026")'
         },
         extension_filter: {
           type: 'STRING',

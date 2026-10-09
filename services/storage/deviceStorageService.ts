@@ -220,6 +220,11 @@ export async function listDirectoryFiles(
     else if (directoryType === 'pictures') targetPath = dirs.pictures;
     else if (directoryType === 'custom' && customPath) targetPath = customPath;
 
+    if (customPath && directoryType !== 'custom') {
+      const cleanSub = customPath.trim().replace(/^\/+/, '');
+      targetPath = `${targetPath}/${cleanSub}`;
+    }
+
     return await ArgusSystemMonitors.listFiles(targetPath, extensionFilter, 2);
   } catch (e) {
     return [];
